@@ -1,0 +1,102 @@
+service: eliemail
+
+frameworkVersion: '3'
+
+plugins:
+  - serverless-offline
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: go1.x
+  tags:
+    project: "lashroom"
+
+
+package:
+  patterns:
+    - '!./**'
+    - ./bin/**
+
+functions:
+  scheduleEmail:
+    role: DefaultRole
+    handler: bin/scheduleEmail
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+          cors: true
+          authorizer:
+            type: COGNITO_USER_POOLS
+            authorizerId:
+              Ref: ApiGatewayAuthorizer
+    environment:
+      EMAIL_TABLE: !Ref LashRoomTable
+    timeout: 30
+  scheduleCheck:
+    role: DefaultRole
+    handler: bin/scheduleCheck
+    events:
+      - schedule: cron(0 23 * * ? *)
+    environment:
+      EMAIL_TABLE: !Ref LashRoomTable
+      EMAIL_DOMAIN: webdevlife.dev
+      EMAIL_API_KEY: ${env:EMAIL_API_KEY}
+      TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
+      MESSAGING_SERVICE_SID: ${env:MESSAGING_SERVICE_SID}
+    timeout: 300
+# you can add CloudFormation resource templates here
+resources:
+  Resources:
+    LashRoomTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+          TableName: "lashroom-scheduled-events-${opt:stage, 'dev'}"
+          BillingMode: PAY_PER_REQUEST
+          AttributeDefinitions:
+            - AttributeName: primaryKey
+              AttributeType: "S"
+          KeySchema:
+            - AttributeName: primaryKey
+              KeyType: HASH
+          TimeToLiveSpecification:
+            AttributeName: TTL
+            Enabled: true
+    DefaultRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: dynamo-access-${opt:stage, 'dev'}
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: dynamo-access-${opt:stage, 'dev'}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:*
+                  Resource:
+                    - !GetAtt LashRoomTable.Arn
+    ApiGatewayAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        AuthorizerResultTtlInSeconds: 300
+        IdentitySource: method.request.header.Authorization
+        Name: Cognito
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        Type: COGNITO_USER_POOLS
+        ProviderARNs:
+          - !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${env:USER_POOL_ID}
+
+
