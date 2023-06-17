@@ -23,6 +23,7 @@ functions:
   scheduleEmail:
     role: DefaultRole
     handler: bin/scheduleEmail
+    memorySize: 128
     events:
       - http:
           path: /{proxy+}
@@ -34,19 +35,22 @@ functions:
               Ref: ApiGatewayAuthorizer
     environment:
       EMAIL_TABLE: !Ref LashRoomTable
+      GIN_MODE: release
     timeout: 30
   scheduleCheck:
+    memorySize: 128
     role: DefaultRole
     handler: bin/scheduleCheck
     events:
-      - schedule: cron(0 23 * * ? *)
+      - schedule: cron(0 22 * * ? *)
     environment:
       EMAIL_TABLE: !Ref LashRoomTable
-      EMAIL_DOMAIN: webdevlife.dev
+      EMAIL_DOMAIN: webdevlife.me
       EMAIL_API_KEY: ${env:EMAIL_API_KEY}
       TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
       MESSAGING_SERVICE_SID: ${env:MESSAGING_SERVICE_SID}
+    
     timeout: 300
 # you can add CloudFormation resource templates here
 resources:
@@ -54,17 +58,35 @@ resources:
     LashRoomTable:
       Type: AWS::DynamoDB::Table
       Properties:
-          TableName: "lashroom-scheduled-events-${opt:stage, 'dev'}"
-          BillingMode: PAY_PER_REQUEST
-          AttributeDefinitions:
-            - AttributeName: primaryKey
-              AttributeType: "S"
-          KeySchema:
-            - AttributeName: primaryKey
-              KeyType: HASH
-          TimeToLiveSpecification:
-            AttributeName: TTL
-            Enabled: true
+        TableName: "lashroom-events-${opt:stage, 'dev'}"
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: primaryKey
+            AttributeType: "S"
+          - AttributeName: sortKey
+            AttributeType: "S"
+          - AttributeName: status
+            AttributeType: "S"
+        KeySchema:
+          - AttributeName: primaryKey
+            KeyType: HASH
+          - AttributeName: sortKey
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: TTL
+          Enabled: true
+        GlobalSecondaryIndexes:
+          - IndexName: STATUS
+            KeySchema:
+              - AttributeName: status
+                KeyType: HASH
+              - AttributeName: primaryKey
+                KeyType: RANGE
+            Projection: 
+              ProjectionType: ALL
+                
+          
+      
     DefaultRole:
       Type: AWS::IAM::Role
       Properties:
@@ -86,7 +108,19 @@ resources:
                   Action:
                     - dynamodb:*
                   Resource:
-                    - !GetAtt LashRoomTable.Arn
+                    - !GetAtt LashRoomTable.Arn 
+                    - !Join ["",[!GetAtt LashRoomTable.Arn, "/index/*"]]
+          - PolicyName: cloudwatch-default-${opt:stage, 'dev'}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:CreateLogGroup
+                    - logs:TagResource
+                    - logs:PutLogEvents
+                  Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
     ApiGatewayAuthorizer:
       Type: AWS::ApiGateway::Authorizer
       Properties:
