@@ -58,7 +58,7 @@ resources:
     LashRoomTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: "lashroom-events-${opt:stage, 'dev'}"
+        TableName: "lashroom-events-table-${opt:stage, 'dev'}"
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: primaryKey
