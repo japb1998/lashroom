@@ -16,14 +16,21 @@ type Record struct {
 	Email            *string `json:"email,omitempty"`
 	PhoneNumber      *string `json:"phone,omitempty"`
 	Status           *string `json:"status,omitempty"`
-	TTL              int64   `json:"TTL,omitempty"`
 	DeliveryMethods  []int8  `json:"deliveryMethods"`
 	Date             string  `json:"date"`
 	ClientName       string  `json:"clientName"`
 	NextNotification *int8   `json:"nextNotification,omitempty"`
+	CreatedBy        string  `json:"createdBy"`
+}
+
+type PatchRecord struct {
+	ID              string  `json:"id"`
+	DeliveryMethods []int8  `json:"deliveryMethods,omitempty"`
+	Date            *string `json:"date,omitempty"`
 }
 type NewSchedule struct {
 	PrimaryKey      string  `json:"primaryKey"` //UUID
+	SortKey         string  `json:"sortKey"`
 	Status          string  `json:"status"`
 	Email           *string `json:"email,omitempty"`
 	PhoneNumber     *string `json:"phone,omitempty"`
@@ -62,7 +69,8 @@ func (nr *Record) ToNewSchedule() (*NewSchedule, error) {
 		PhoneNumber: nr.PhoneNumber,
 		Email:       nr.Email,
 	}
-	schedule.PrimaryKey = uuid.New().String()
+	schedule.SortKey = uuid.New().String()
+	schedule.PrimaryKey = nr.CreatedBy
 	schedule.DeliveryMethods = make([]int8, 0)
 	if nr.DeliveryMethods == nil || len(nr.DeliveryMethods) == 0 {
 		return nil, errors.New("delivery Method can't be empty")
@@ -82,6 +90,9 @@ func (nr *Record) ToNewSchedule() (*NewSchedule, error) {
 
 	return &schedule, nil
 }
+func (nr *Record) SetCreatedBy(createdBy string) {
+	nr.CreatedBy = createdBy
+}
 
 func (ns *NewSchedule) ToDynamoAttr() (map[string]*dynamodb.AttributeValue, error) {
 
@@ -96,10 +107,10 @@ func (ns *NewSchedule) ToDynamoAttr() (map[string]*dynamodb.AttributeValue, erro
 
 func (ns *NewSchedule) ToRecord() Record {
 	record := Record{
-		ID:              &ns.PrimaryKey,
+		ID:              &ns.SortKey,
+		CreatedBy:       ns.PrimaryKey,
 		ClientName:      ns.ClientName,
 		Status:          &ns.Status,
-		TTL:             ns.TTL,
 		Date:            ns.Date,
 		Email:           ns.Email,
 		PhoneNumber:     ns.PhoneNumber,
@@ -108,6 +119,7 @@ func (ns *NewSchedule) ToRecord() Record {
 
 	return record
 }
+
 func Contains[T comparable](s []T, e T) bool {
 	for _, v := range s {
 		if v == e {

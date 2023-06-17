@@ -62,16 +62,20 @@ func sendEmailNotifications(newSchedules []shared.NewSchedule, ddb dbmodule.Dyna
 			defer wg.Done()
 			if _, err := SendEmail(*schedule.Email, 2, "lashroom", map[string]string{
 				"customer_name": schedule.ClientName}); err != nil {
+
+				log.Printf("Error While sending Email: %s", err.Error())
+
 				wg.Add(1)
 				go func(ddb dbmodule.DynamoClient) {
-					updateNotificationStatus(schedule.PrimaryKey, shared.FAILED, ddb)
-					wg.Done()
+					defer wg.Done()
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.FAILED, ddb)
+
 				}(ddb)
 			} else {
 				wg.Add(1)
 				go func(ddb dbmodule.DynamoClient) {
-					updateNotificationStatus(schedule.PrimaryKey, shared.SENT, ddb)
-					wg.Done()
+					defer wg.Done()
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.SENT, ddb)
 				}(ddb)
 			}
 
@@ -149,14 +153,16 @@ func TriggerTextNotification(newSchedules []shared.NewSchedule, ddb dbmodule.Dyn
 					"[address]", schedule.ClientName)); err != nil {
 				wg.Add(1)
 				go func(ddb dbmodule.DynamoClient) {
-					updateNotificationStatus(schedule.PrimaryKey, shared.FAILED, ddb)
-					wg.Done()
+					defer wg.Done()
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.FAILED, ddb)
+
 				}(ddb)
 			} else {
 				wg.Add(1)
 				go func(ddb dbmodule.DynamoClient) {
-					updateNotificationStatus(schedule.PrimaryKey, shared.SENT, ddb)
-					wg.Done()
+					defer wg.Done()
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.SENT, ddb)
+
 				}(ddb)
 			}
 
@@ -189,11 +195,12 @@ func SendTextMessage(phoneNumber string, clientName string, text string) error {
 	}
 	return nil
 }
-func updateNotificationStatus(pk string, status string, ddb dbmodule.DynamoClient) error {
+func updateNotificationStatus(pk string, sk string, status string, ddb dbmodule.DynamoClient) error {
 	table := os.Getenv("EMAIL_TABLE")
 	awsStatus, err := dynamodbattribute.Marshal(status)
 	key, keyErr := dynamodbattribute.MarshalMap(map[string]interface{}{
 		"primaryKey": pk,
+		"sortKey":    sk,
 	})
 	if err != nil || keyErr != nil {
 		log.Println(err, keyErr)
@@ -221,25 +228,28 @@ func updateNotificationStatus(pk string, status string, ddb dbmodule.DynamoClien
 
 func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, error) {
 	table := os.Getenv("EMAIL_TABLE")
+	startDate := getTodaysHourZero()
+	endDate := getTomorrowHourZero()
 	attrValue, err := dynamodbattribute.MarshalMap(map[string]interface{}{
-		":primaryKey": shared.NOT_SENT,
-		":start_date": getTodaysHourZero(),
-		":end_date":   getTomorrowHourZero(),
+		":status":     shared.NOT_SENT,
+		":start_date": startDate,
+		":end_date":   endDate,
 	})
-
+	log.Printf("Any Notifications Between %s and %s\n", startDate, endDate)
 	if err != nil {
 		log.Println(err)
 		return nil, errors.New("error marshalling atttributes")
 	}
 	input := dynamodb.QueryInput{
 		TableName:              &table,
-		KeyConditionExpression: aws.String("#primaryKey = :primaryKey"),
+		KeyConditionExpression: aws.String("#status = :status"),
 		ExpressionAttributeNames: map[string]*string{
-			"#primaryKey": aws.String("primaryKey"),
-			"#date":       aws.String("date"),
+			"#status": aws.String("status"),
+			"#date":   aws.String("date"),
 		},
 		ExpressionAttributeValues: attrValue,
 		FilterExpression:          aws.String("#date BETWEEN :start_date AND :end_date"),
+		IndexName:                 aws.String("STATUS"),
 	}
 
 	if output, err := ddb.Query(&input); err != nil {
@@ -256,7 +266,7 @@ func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, 
 			log.Println(err)
 			return nil, errors.New("Error While Unmarshalling Schedules")
 		}
-
+		fmt.Println(newSchedules)
 		return newSchedules, nil
 
 	}

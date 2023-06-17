@@ -1,8 +1,17 @@
 package main
 
-import "github.com/aws/aws-lambda-go/lambda"
+import (
+	"context"
+	"os"
+
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+)
 
 func main() {
-	lambda.Start(handler)
-	// handler(context.Background(), events.CloudWatchEvent{})
+	if os.Getenv("STAGE") != "local" {
+		lambda.Start(handler)
+	} else {
+		handler(context.Background(), events.CloudWatchEvent{})
+	}
 }
