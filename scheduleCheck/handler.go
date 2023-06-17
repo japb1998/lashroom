@@ -13,8 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/japb1998/eliemail/dbmodule"
-	"github.com/japb1998/eliemail/shared"
+	"github.com/japb1998/lashroom/dbmodule"
+	"github.com/japb1998/lashroom/shared"
 	"github.com/mailgun/mailgun-go/v3"
 	"github.com/twilio/twilio-go"
 	api "github.com/twilio/twilio-go/rest/api/v2010"
@@ -254,7 +254,7 @@ func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, 
 
 	if output, err := ddb.Query(&input); err != nil {
 		log.Println(err)
-		return nil, errors.New("Error while querying phone Notifications")
+		return nil, errors.New("error while querying phone Notifications")
 	} else {
 		items := output.Items
 
@@ -264,7 +264,7 @@ func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, 
 
 		if err != nil {
 			log.Println(err)
-			return nil, errors.New("Error While Unmarshalling Schedules")
+			return nil, errors.New("error While Unmarshalling Schedules")
 		}
 		fmt.Println(newSchedules)
 		return newSchedules, nil

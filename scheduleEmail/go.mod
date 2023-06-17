@@ -1,4 +1,4 @@
-module github.com/japb1998/eliemail/scheduleEmail
+module github.com/japb1998/lashroom/scheduleEmail
 
 go 1.20
 

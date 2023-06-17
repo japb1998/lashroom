@@ -18,8 +18,8 @@ import (
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
-	"github.com/japb1998/eliemail/dbmodule"
-	"github.com/japb1998/eliemail/shared"
+	"github.com/japb1998/lashroom/dbmodule"
+	"github.com/japb1998/lashroom/shared"
 )
 
 type Response events.APIGatewayProxyResponse
