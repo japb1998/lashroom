@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -13,52 +13,52 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/japb1998/lashroom/dbmodule"
-	"github.com/japb1998/lashroom/shared"
+	"github.com/japb1998/lashroom/shared/pkg/database"
+	"github.com/japb1998/lashroom/shared/pkg/record"
 	"github.com/mailgun/mailgun-go/v3"
 	"github.com/twilio/twilio-go"
 	api "github.com/twilio/twilio-go/rest/api/v2010"
 )
 
 const (
-	PHONE shared.ContactOptions = iota
+	PHONE record.ContactOptions = iota
 	EMAIL
 )
 
 var wg sync.WaitGroup
 
-func handler(_ context.Context, event events.CloudWatchEvent) {
-	ddb := dbmodule.DynamoClient{
-		Client: dynamodb.New(dbmodule.Session),
+func Handler(_ context.Context, event events.CloudWatchEvent) {
+	ddb := database.DynamoClient{
+		Client: dynamodb.New(database.Session),
 	}
 	newSchedules, err := GetNotSentNotifications(&ddb)
 
 	if err != nil {
 		log.Panicln("Error while getting notifications")
 	}
-	filterByDeliveryMethod := func(deliveryMethod int8) []shared.NewSchedule {
+	filterByDeliveryMethod := func(deliveryMethod int8) []record.NewSchedule {
 
-		emails := make([]shared.NewSchedule, 0)
+		emails := make([]record.NewSchedule, 0)
 
 		for _, ns := range newSchedules {
-			if shared.Contains(ns.DeliveryMethods, deliveryMethod) {
+			if record.Contains(ns.DeliveryMethods, deliveryMethod) {
 				emails = append(emails, ns)
 			}
 		}
 		return emails
 	}
 	wg.Add(2)
-	go sendEmailNotifications(filterByDeliveryMethod(int8(shared.EMAIL)), ddb)
-	go TriggerTextNotification(filterByDeliveryMethod(int8(shared.PHONE)), ddb)
+	go sendEmailNotifications(filterByDeliveryMethod(int8(record.EMAIL)), ddb)
+	go TriggerTextNotification(filterByDeliveryMethod(int8(record.PHONE)), ddb)
 	wg.Wait()
 }
 
-func sendEmailNotifications(newSchedules []shared.NewSchedule, ddb dbmodule.DynamoClient) {
+func sendEmailNotifications(newSchedules []record.NewSchedule, ddb database.DynamoClient) {
 	defer wg.Done()
 
 	for _, schedule := range newSchedules {
 		wg.Add(1)
-		go func(schedule shared.NewSchedule) {
+		go func(schedule record.NewSchedule) {
 			defer wg.Done()
 			if _, err := SendEmail(*schedule.Email, 2, "lashroom", map[string]string{
 				"customer_name": schedule.ClientName}); err != nil {
@@ -66,16 +66,16 @@ func sendEmailNotifications(newSchedules []shared.NewSchedule, ddb dbmodule.Dyna
 				log.Printf("Error While sending Email: %s", err.Error())
 
 				wg.Add(1)
-				go func(ddb dbmodule.DynamoClient) {
+				go func(ddb database.DynamoClient) {
 					defer wg.Done()
-					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.FAILED, ddb)
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, record.FAILED, ddb)
 
 				}(ddb)
 			} else {
 				wg.Add(1)
-				go func(ddb dbmodule.DynamoClient) {
+				go func(ddb database.DynamoClient) {
 					defer wg.Done()
-					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.SENT, ddb)
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, record.SENT, ddb)
 				}(ddb)
 			}
 
@@ -138,12 +138,12 @@ func SendEmail(recipient string, weekValue int8, template string, templateVariab
 	_, id, err := mg.Send(ctx, m)
 	return id, err
 }
-func TriggerTextNotification(newSchedules []shared.NewSchedule, ddb dbmodule.DynamoClient) {
+func TriggerTextNotification(newSchedules []record.NewSchedule, ddb database.DynamoClient) {
 
 	for _, schedule := range newSchedules {
 
 		wg.Add(1)
-		go func(schedule shared.NewSchedule) {
+		go func(schedule record.NewSchedule) {
 			defer wg.Done()
 			if err := SendTextMessage(*schedule.PhoneNumber, schedule.ClientName, fmt.Sprintf(
 				"Hi, %s I hope this message finds you feeling as fabulous as ever!"+
@@ -152,16 +152,16 @@ func TriggerTextNotification(newSchedules []shared.NewSchedule, ddb dbmodule.Dyn
 					"[booksy]\n"+
 					"[address]", schedule.ClientName)); err != nil {
 				wg.Add(1)
-				go func(ddb dbmodule.DynamoClient) {
+				go func(ddb database.DynamoClient) {
 					defer wg.Done()
-					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.FAILED, ddb)
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, record.FAILED, ddb)
 
 				}(ddb)
 			} else {
 				wg.Add(1)
-				go func(ddb dbmodule.DynamoClient) {
+				go func(ddb database.DynamoClient) {
 					defer wg.Done()
-					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, shared.SENT, ddb)
+					updateNotificationStatus(schedule.PrimaryKey, schedule.SortKey, record.SENT, ddb)
 
 				}(ddb)
 			}
@@ -195,7 +195,7 @@ func SendTextMessage(phoneNumber string, clientName string, text string) error {
 	}
 	return nil
 }
-func updateNotificationStatus(pk string, sk string, status string, ddb dbmodule.DynamoClient) error {
+func updateNotificationStatus(pk string, sk string, status string, ddb database.DynamoClient) error {
 	table := os.Getenv("EMAIL_TABLE")
 	awsStatus, err := dynamodbattribute.Marshal(status)
 	key, keyErr := dynamodbattribute.MarshalMap(map[string]interface{}{
@@ -218,7 +218,7 @@ func updateNotificationStatus(pk string, sk string, status string, ddb dbmodule.
 		},
 	}
 	switch status {
-	case shared.SENT, shared.FAILED:
+	case record.SENT, record.FAILED:
 		_, err := ddb.UpdateItem(&input)
 		return err
 	default:
@@ -226,12 +226,12 @@ func updateNotificationStatus(pk string, sk string, status string, ddb dbmodule.
 	}
 }
 
-func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, error) {
+func GetNotSentNotifications(ddb *database.DynamoClient) ([]record.NewSchedule, error) {
 	table := os.Getenv("EMAIL_TABLE")
 	startDate := getTodaysHourZero()
 	endDate := getTomorrowHourZero()
 	attrValue, err := dynamodbattribute.MarshalMap(map[string]interface{}{
-		":status":     shared.NOT_SENT,
+		":status":     record.NOT_SENT,
 		":start_date": startDate,
 		":end_date":   endDate,
 	})
@@ -258,7 +258,7 @@ func GetNotSentNotifications(ddb *dbmodule.DynamoClient) ([]shared.NewSchedule, 
 	} else {
 		items := output.Items
 
-		var newSchedules []shared.NewSchedule
+		var newSchedules []record.NewSchedule
 
 		err := dynamodbattribute.UnmarshalListOfMaps(items, &newSchedules)
 

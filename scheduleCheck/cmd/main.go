@@ -6,12 +6,13 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	h "github.com/japb1998/lashroom/scheduleCheck/pkg/handler"
 )
 
 func main() {
 	if os.Getenv("STAGE") != "local" {
-		lambda.Start(handler)
+		lambda.Start(h.Handler)
 	} else {
-		handler(context.Background(), events.CloudWatchEvent{})
+		h.Handler(context.Background(), events.CloudWatchEvent{})
 	}
 }

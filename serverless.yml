@@ -1,4 +1,4 @@
-service: lashroom
+service: ${env:APP_ID}
 
 frameworkVersion: '3'
 
@@ -58,7 +58,7 @@ resources:
     LashRoomTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: "lashroom-events-table-${opt:stage, 'dev'}"
+        TableName: ${env:APP_ID}-events-table-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: primaryKey
@@ -90,7 +90,7 @@ resources:
     DefaultRole:
       Type: AWS::IAM::Role
       Properties:
-        RoleName: dynamo-access-${opt:stage, 'dev'}
+        RoleName: ${env:APP_ID}-dynamo-access-${opt:stage, 'dev'}
         AssumeRolePolicyDocument:
           Version: '2012-10-17'
           Statement:
@@ -100,7 +100,7 @@ resources:
                   - lambda.amazonaws.com
               Action: sts:AssumeRole
         Policies:
-          - PolicyName: dynamo-access-${opt:stage, 'dev'}
+          - PolicyName: ${env:APP_ID}-dynamo-access-${opt:stage, 'dev'}
             PolicyDocument:
               Version: '2012-10-17'
               Statement:
@@ -110,7 +110,7 @@ resources:
                   Resource:
                     - !GetAtt LashRoomTable.Arn 
                     - !Join ["",[!GetAtt LashRoomTable.Arn, "/index/*"]]
-          - PolicyName: cloudwatch-default-${opt:stage, 'dev'}
+          - PolicyName: ${env:APP_ID}-cloudwatch-default-${opt:stage, 'dev'}
             PolicyDocument:
               Version: '2012-10-17'
               Statement:

@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
-	"github.com/japb1998/lashroom/dbmodule"
-	"github.com/japb1998/lashroom/shared"
+	"github.com/japb1998/lashroom/shared/pkg/database"
+	"github.com/japb1998/lashroom/shared/pkg/record"
 )
 
 type Response events.APIGatewayProxyResponse
@@ -30,7 +30,7 @@ var (
 	TableName = os.Getenv("EMAIL_TABLE")
 )
 
-func serve() {
+func Serve() {
 	// stdout and stderr are sent to AWS CloudWatch Logs
 	log.Printf("Gin cold start")
 	r := gin.Default()
@@ -42,8 +42,8 @@ func serve() {
 			c.AbortWithError(http.StatusBadGateway, errors.New("error while decoding JWT token"))
 		}
 
-		ddb := dbmodule.DynamoClient{
-			Client: dynamodb.New(dbmodule.Session),
+		ddb := database.DynamoClient{
+			Client: dynamodb.New(database.Session),
 		}
 		attr, err := dynamodbattribute.Marshal(*userEmail)
 
@@ -67,8 +67,8 @@ func serve() {
 			log.Println(err)
 			c.AbortWithError(http.StatusBadGateway, errors.New("error while getting schedules"))
 		} else {
-			var schedules []shared.NewSchedule
-			records := make([]shared.Record, 0) // []
+			var schedules []record.NewSchedule
+			records := make([]record.Record, 0) // []
 			err = dynamodbattribute.UnmarshalListOfMaps(output.Items, &schedules)
 			log.Printf("records: %v", records)
 			if err != nil {
@@ -112,7 +112,7 @@ func serve() {
 			return
 		}
 
-		var incomingRecord shared.Record
+		var incomingRecord record.Record
 		err = json.Unmarshal(new, &incomingRecord)
 
 		if err != nil {
@@ -148,8 +148,8 @@ func serve() {
 			Item:      item,
 		}
 
-		client := dbmodule.DynamoClient{
-			Client: dynamodb.New(dbmodule.Session),
+		client := database.DynamoClient{
+			Client: dynamodb.New(database.Session),
 		}
 
 		if _, err = client.PutItem(&input); err != nil {
@@ -188,7 +188,7 @@ func serve() {
 			})
 			return
 		}
-		var patchRecord shared.PatchRecord
+		var patchRecord record.PatchRecord
 
 		err = json.Unmarshal(new, &patchRecord)
 
@@ -271,8 +271,8 @@ func serve() {
 			ReturnValues:              aws.String("ALL_NEW"),
 		}
 
-		ddb := dbmodule.DynamoClient{
-			Client: dynamodb.New(dbmodule.Session),
+		ddb := database.DynamoClient{
+			Client: dynamodb.New(database.Session),
 		}
 
 		output, err := ddb.UpdateItem(input)
@@ -286,7 +286,7 @@ func serve() {
 		}
 
 		updatedItem := output.Attributes
-		var newSchedule shared.NewSchedule
+		var newSchedule record.NewSchedule
 		err = dynamodbattribute.UnmarshalMap(updatedItem, &newSchedule)
 
 		if err != nil {

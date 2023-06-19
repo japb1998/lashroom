@@ -1,9 +1,9 @@
-.PHONY: build clean deploy gomodgen
+.PHONY: build clean deploy gomodgen serve
 
 build: 
 	export GO111MODULE=on
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleEmail ./scheduleEmail
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleCheck ./scheduleCheck
+	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleEmail ./scheduleEmail/cmd
+	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleCheck ./scheduleCheck/cmd
 	
 
 clean:
@@ -15,3 +15,8 @@ deploy: clean build
 gomodgen:
 	chmod u+x gomod.sh
 	./gomod.sh
+
+serve: 
+	source "C:\Users\Javier Perez\OneDrive\Desktop\eliEmail\environment.sh"
+	STAGE=local
+	go run ./scheduleEmail/cmd

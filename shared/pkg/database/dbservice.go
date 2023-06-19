@@ -1,4 +1,4 @@
-package dbmodule
+package database
 
 import (
 	"log"
