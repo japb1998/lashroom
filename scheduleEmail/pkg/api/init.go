@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	"github.com/japb1998/lashroom/shared/pkg/database"
@@ -34,6 +35,17 @@ func Serve() {
 	// stdout and stderr are sent to AWS CloudWatch Logs
 	log.Printf("Gin cold start")
 	r := gin.Default()
+
+	corsConfig := cors.DefaultConfig()
+
+	corsConfig.AllowOrigins = []string{"*"}
+
+	// To be able to send tokens to the server.
+	corsConfig.AllowCredentials = true
+	corsConfig.AllowHeaders = []string{"*"}
+	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
+	r.Use(cors.New(corsConfig))
+
 	schedule := r.Group("/schedule")
 	schedule.GET("", func(c *gin.Context) {
 
@@ -310,6 +322,7 @@ func Serve() {
 			"new": dto,
 		})
 	})
+
 	if os.Getenv("STAGE") == "local" {
 		if err := r.Run(); err != nil {
 			log.Fatal("Error while starting the server")
