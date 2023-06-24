@@ -2,6 +2,7 @@ package record
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -94,6 +95,16 @@ func (nr *Record) SetCreatedBy(createdBy string) {
 	nr.CreatedBy = createdBy
 }
 
+func (nr *Record) ToClient() (map[string]any, error) {
+	if nr.CreatedBy == "" {
+		return nil, fmt.Errorf("no CreatedBy property present")
+	}
+	return map[string]any{
+		"createdBy": nr.CreatedBy,
+		"phone":     nr.PhoneNumber,
+		"email":     nr.Email,
+	}, nil
+}
 func (ns *NewSchedule) ToDynamoAttr() (map[string]*dynamodb.AttributeValue, error) {
 
 	if output, err := dynamodbattribute.MarshalMap(*ns); err != nil {

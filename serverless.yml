@@ -4,6 +4,7 @@ frameworkVersion: '3'
 
 plugins:
   - serverless-offline
+  - serverless-lift
 
 useDotenv: true
 
@@ -23,7 +24,7 @@ functions:
   scheduleEmail:
     role: DefaultRole
     handler: bin/scheduleEmail
-    memorySize: 128
+    memorySize: 256
     events:
       - http:
           path: /{proxy+}
@@ -34,31 +35,45 @@ functions:
             authorizerId:
               Ref: ApiGatewayAuthorizer
     environment:
-      EMAIL_TABLE: !Ref LashRoomTable
+      EMAIL_TABLE: !Ref NotificationsTable
+      CLIENT_TABLE: !Ref ClientTable
+      QUEUE_URL: ${construct:ClientCreationQueue.queueUrl}
       GIN_MODE: release
     timeout: 30
   scheduleCheck:
-    memorySize: 128
+    memorySize: 256
     role: DefaultRole
     handler: bin/scheduleCheck
     events:
       - schedule: cron(0 22 * * ? *)
     environment:
-      EMAIL_TABLE: !Ref LashRoomTable
+      EMAIL_TABLE: !Ref NotificationsTable
       EMAIL_DOMAIN: webdevlife.me
       EMAIL_API_KEY: ${env:EMAIL_API_KEY}
       TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
       MESSAGING_SERVICE_SID: ${env:MESSAGING_SERVICE_SID}
-    
+
     timeout: 300
+
+constructs:
+  ClientCreationQueue: 
+    type: queue
+    worker:
+      memorySize: 256
+      handler: ./bin/queueHandler
+      role: DefaultRole
+      environment:
+        QUEUE_URL: ${construct:ClientCreationQueue.queueUrl}
+        CLIENT_TABLE: !Ref ClientTable
+      
 # you can add CloudFormation resource templates here
 resources:
   Resources:
-    LashRoomTable:
+    NotificationsTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: ${env:APP_ID}-events-table-${opt:stage, 'dev'}
+        TableName: ${env:APP_ID}-event-table-${opt:stage, 'dev'}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: primaryKey
@@ -84,6 +99,21 @@ resources:
                 KeyType: RANGE
             Projection: 
               ProjectionType: ALL
+    ClientTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${env:APP_ID}-client-table-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: primaryKey
+            AttributeType: "S"
+          - AttributeName: sortKey
+            AttributeType: "S"
+        KeySchema:
+          - AttributeName: primaryKey
+            KeyType: HASH
+          - AttributeName: sortKey
+            KeyType: RANGE
                 
           
       
@@ -108,8 +138,10 @@ resources:
                   Action:
                     - dynamodb:*
                   Resource:
-                    - !GetAtt LashRoomTable.Arn 
-                    - !Join ["",[!GetAtt LashRoomTable.Arn, "/index/*"]]
+                    - !GetAtt NotificationsTable.Arn 
+                    - !Join ["",[!GetAtt NotificationsTable.Arn, "/index/*"]]
+                    - !GetAtt ClientTable.Arn 
+                    - !Join ["",[!GetAtt ClientTable.Arn, "/index/*"]]
           - PolicyName: ${env:APP_ID}-cloudwatch-default-${opt:stage, 'dev'}
             PolicyDocument:
               Version: '2012-10-17'
@@ -121,6 +153,15 @@ resources:
                     - logs:TagResource
                     - logs:PutLogEvents
                   Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+          - PolicyName: ${env:APP_ID}-sqs-access-${opt:stage, 'dev'}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:*
+                  Resource:
+                    - ${construct:ClientCreationQueue.queueArn}
     ApiGatewayAuthorizer:
       Type: AWS::ApiGateway::Authorizer
       Properties:
