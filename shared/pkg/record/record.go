@@ -100,9 +100,10 @@ func (nr *Record) ToClient() (map[string]any, error) {
 		return nil, fmt.Errorf("no CreatedBy property present")
 	}
 	return map[string]any{
-		"createdBy": nr.CreatedBy,
-		"phone":     nr.PhoneNumber,
-		"email":     nr.Email,
+		"clientName": nr.ClientName,
+		"createdBy":  nr.CreatedBy,
+		"phone":      nr.PhoneNumber,
+		"email":      nr.Email,
 	}, nil
 }
 func (ns *NewSchedule) ToDynamoAttr() (map[string]*dynamodb.AttributeValue, error) {
@@ -117,11 +118,12 @@ func (ns *NewSchedule) ToDynamoAttr() (map[string]*dynamodb.AttributeValue, erro
 }
 
 func (ns *NewSchedule) ToRecord() Record {
+	status, id := ns.Status, ns.SortKey
 	record := Record{
-		ID:              &ns.SortKey,
+		ID:              &id,
 		CreatedBy:       ns.PrimaryKey,
 		ClientName:      ns.ClientName,
-		Status:          &ns.Status,
+		Status:          &status,
 		Date:            ns.Date,
 		Email:           ns.Email,
 		PhoneNumber:     ns.PhoneNumber,

@@ -121,6 +121,7 @@ func processClientMessage(ddb database.DynamoClient, messages events.SQSMessage)
 		SortKey:    uuid.New().String(),
 		Email:      clientEmail,
 		Phone:      clientPhone,
+		ClientName: ev.Body["clientName"].(string),
 	}
 	item, err := dynamodbattribute.MarshalMap(newClient)
 

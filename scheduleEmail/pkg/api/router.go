@@ -30,8 +30,9 @@ type Response events.APIGatewayProxyResponse
 var ginLambda *ginadapter.GinLambda
 
 var (
-	TableName = os.Getenv("EMAIL_TABLE")
-	queueUrl  = os.Getenv("QUEUE_URL")
+	TableName   = os.Getenv("EMAIL_TABLE")
+	ClientTable = os.Getenv("CLIENT_TABLE")
+	queueUrl    = os.Getenv("QUEUE_URL")
 )
 
 func Serve() {
@@ -351,7 +352,7 @@ func Serve() {
 		}
 
 		queryInput := &dynamodb.QueryInput{
-			TableName:                 &TableName,
+			TableName:                 &ClientTable,
 			KeyConditionExpression:    aws.String("#primaryKey = :primaryKey"),
 			ExpressionAttributeValues: queryValue,
 			ExpressionAttributeNames: map[string]*string{
@@ -371,7 +372,16 @@ func Serve() {
 
 		var clientEntityList []client.ClientEntity
 
-		err = dynamodbattribute.UnmarshalListOfMaps(output.Items, &clientEntityList)
+		for _, item := range output.Items {
+			var entity client.ClientEntity
+			if err := dynamodbattribute.UnmarshalMap(item, &entity); err != nil {
+				log.Println(err.Error())
+			} else {
+				clientEntityList = append(clientEntityList, entity)
+			}
+
+		}
+
 		if err != nil {
 			log.Println(err)
 			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
@@ -383,9 +393,9 @@ func Serve() {
 		var clientDtoList = make([]client.ClientDto, len(clientEntityList))
 
 		for i, entity := range clientEntityList {
-
+			log.Println(entity.ClientName, entity.SortKey)
 			clientDtoList[i] = entity.ToClientDto()
-
+			log.Println(clientDtoList[i].ClientName, *clientDtoList[i].Id)
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"records": clientDtoList,
