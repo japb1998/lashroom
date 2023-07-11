@@ -10,6 +10,12 @@ type DynamoClient struct {
 	Client *dynamodb.DynamoDB
 }
 
+func NewDynamoClient() *DynamoClient {
+	return &DynamoClient{
+		Client: dynamodb.New(Session),
+	}
+}
+
 func (dynamodb *DynamoClient) Query(queryInput *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
 
 	output, err := dynamodb.Client.Query(queryInput)

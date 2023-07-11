@@ -1,15 +1,18 @@
 package client
 
 type ClientEntity struct {
-	PrimaryKey string  `json:"primaryKey"`
-	SortKey    string  `json:"sortKey"`
-	Phone      *string `json:"phone"`
-	Email      *string `json:"email"`
-	ClientName string  `json:"clientName"`
+	PrimaryKey  string  `json:"primaryKey"`
+	SortKey     string  `json:"sortKey"`
+	Phone       *string `json:"phone"`
+	Email       *string `json:"email"`
+	ClientName  string  `json:"clientName"`
+	CreatedAt   string  `json:"createdAt"`
+	Description string  `json:"description"`
 }
 
 func (c *ClientEntity) ToClientDto() ClientDto {
 	id := c.SortKey
+
 	return ClientDto{
 		CreatedBy:  c.PrimaryKey,
 		Id:         &id,
@@ -20,9 +23,11 @@ func (c *ClientEntity) ToClientDto() ClientDto {
 }
 
 type ClientDto struct {
-	CreatedBy  string  `json:"createdBy"`
-	Id         *string `json:"id"`
-	Phone      *string `json:"phone"`
-	Email      *string `json:"email"`
-	ClientName string  `json:"clientName"`
+	CreatedBy   string  `json:"createdBy"`
+	Id          *string `json:"id"`
+	Phone       *string `json:"phone"`
+	Email       *string `json:"email"`
+	ClientName  string  `json:"clientName"`
+	CreatedAt   string  `json:"createdAt"`
+	Description string  `json:"description"`
 }

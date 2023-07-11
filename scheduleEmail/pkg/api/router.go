@@ -17,10 +17,9 @@ import (
 	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	sqsRecord "github.com/japb1998/lashroom/clientQueue/pkg/record"
-	"github.com/japb1998/lashroom/shared/pkg/client"
+	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
 	"github.com/japb1998/lashroom/shared/pkg/database"
 	"github.com/japb1998/lashroom/shared/pkg/record"
 )
@@ -289,9 +288,7 @@ func Serve() {
 				ReturnValues:              aws.String("ALL_NEW"),
 			}
 
-			ddb := database.DynamoClient{
-				Client: dynamodb.New(database.Session),
-			}
+			ddb := database.NewDynamoClient()
 
 			output, err := ddb.UpdateItem(input)
 
@@ -334,73 +331,88 @@ func Serve() {
 	clients.GET("", func(c *gin.Context) {
 
 		userEmail := c.MustGet("email").(string)
+		store := database.NewClientRepository()
+		clientService := client.NewClientService(store)
 
-		ddbClient := database.DynamoClient{
-			Client: dynamodb.New(database.Session),
+		if clientDtoList, err := clientService.GetClientsByCreator(userEmail); err != nil {
+
+			log.Println(err.Error())
+			c.AbortWithStatusJSON(http.StatusBadGateway, map[string]string{
+				"message": "Error while retreiving clients",
+			})
+
+		} else {
+
+			c.JSON(http.StatusOK, gin.H{
+				"records": clientDtoList,
+				"count":   len(clientDtoList),
+			})
 		}
+	})
 
-		queryValue, err := dynamodbattribute.MarshalMap(map[string]any{
-			":primaryKey": userEmail,
-		})
+	clients.POST("", func(c *gin.Context) {
+		userEmail := c.MustGet("email").(string)
+		var clientDto client.ClientDto
+		store := database.NewClientRepository()
+		clientService := client.NewClientService(store)
+		body, err := io.ReadAll(c.Request.Body)
 
 		if err != nil {
 			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"error": "Error getting clients",
-			})
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
 			return
 		}
 
-		queryInput := &dynamodb.QueryInput{
-			TableName:                 &ClientTable,
-			KeyConditionExpression:    aws.String("#primaryKey = :primaryKey"),
-			ExpressionAttributeValues: queryValue,
-			ExpressionAttributeNames: map[string]*string{
-				"#primaryKey": aws.String("primaryKey"),
-			},
-		}
-
-		output, err := ddbClient.Query(queryInput)
+		err = json.Unmarshal(body, &clientDto)
+		clientDto.CreatedBy = userEmail
 
 		if err != nil {
 			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"error": "Error getting clients",
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "invalid json body",
 			})
-			return
 		}
 
-		var clientEntityList []client.ClientEntity
-
-		for _, item := range output.Items {
-			var entity client.ClientEntity
-			if err := dynamodbattribute.UnmarshalMap(item, &entity); err != nil {
-				log.Println(err.Error())
-			} else {
-				clientEntityList = append(clientEntityList, entity)
-			}
-
+		if client, err := clientService.CreateClient(clientDto); err != nil {
+			log.Println(err)
+			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+				"error": "error updating user",
+			})
+		} else {
+			c.JSON(http.StatusOK, client)
 		}
+
+	})
+	clients.PATCH("/:id", func(c *gin.Context) {
+		userEmail := c.MustGet("email").(string)
+		clientId, _ := c.Params.Get("id")
+		var clientDto client.ClientDto
+		store := database.NewClientRepository()
+		clientService := client.NewClientService(store)
+		body, err := io.ReadAll(c.Request.Body)
 
 		if err != nil {
 			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"error": "Error getting clients",
-			})
+			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
 			return
 		}
 
-		var clientDtoList = make([]client.ClientDto, len(clientEntityList))
-
-		for i, entity := range clientEntityList {
-			log.Println(entity.ClientName, entity.SortKey)
-			clientDtoList[i] = entity.ToClientDto()
-			log.Println(clientDtoList[i].ClientName, *clientDtoList[i].Id)
+		err = json.Unmarshal(body, &clientDto)
+		if err != nil {
+			log.Println(err)
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "invalid json body",
+			})
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"records": clientDtoList,
-			"count":   len(clientDtoList),
-		})
+
+		if client, err := clientService.UpdateUser(userEmail, clientId, clientDto); err != nil {
+			log.Println(err)
+			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+				"error": "error updating user",
+			})
+		} else {
+			c.JSON(http.StatusOK, client)
+		}
 	})
 
 	if os.Getenv("STAGE") == "local" {
@@ -409,50 +421,5 @@ func Serve() {
 		}
 	} else {
 		ginLambda = ginadapter.New(r)
-	}
-}
-
-func getUserEmailFromToken(tokenString string) (*string, error) {
-	claims := jwt.MapClaims{}
-	token := strings.Split(tokenString, " ")[1]
-	jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
-		return nil, nil
-	})
-	if email, ok := claims["email"]; !ok {
-
-		return nil, errors.New("error while getting user email from token")
-
-	} else if emailString, ok := email.(string); !ok {
-
-		return nil, errors.New("email is not a string")
-	} else {
-		return &emailString, nil
-	}
-}
-
-func currentUserMiddleWare() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		log.Println("Extracting User")
-
-		token, ok := c.Request.Header["Authorization"]
-
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Unauthorized",
-			})
-			c.Abort()
-			return
-		}
-		email, err := getUserEmailFromToken(token[0])
-
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Unauthorized",
-			})
-			c.Abort()
-			return
-		}
-		c.Set("email", *email)
-		c.Next()
 	}
 }
