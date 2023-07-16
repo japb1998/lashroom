@@ -4,6 +4,9 @@ type Store interface {
 	GetClientsByCreator(string) ([]ClientDto, error)
 	UpdateUser(createdBy string, userId string, client ClientDto) (ClientDto, error)
 	CreateClient(ClientDto) (ClientDto, error)
+	DeleteClient(createdBy, id string) error
+	GetClientById(createdBy, id string) (*ClientDto, error)
+	GetClientWithFilters(createdBy string, clientDto ClientDto) ([]ClientDto, error)
 }
 
 type ClientService struct {
@@ -55,4 +58,34 @@ func (c ClientService) CreateClient(client ClientDto) (ClientDto, error) {
 	}
 
 	return clientDto, nil
+}
+
+func (c ClientService) DeleteClient(createdBy, id string) error {
+	err := c.Store.DeleteClient(createdBy, id)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c ClientService) GetClientById(createdBy, id string) (*ClientDto, error) {
+	client, err := c.Store.GetClientById(createdBy, id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (c ClientService) GetClientWithFilters(createdBy string, clientDto ClientDto) ([]ClientDto, error) {
+	clientList, err := c.Store.GetClientWithFilters(createdBy, clientDto)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return clientList, nil
 }

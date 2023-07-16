@@ -111,6 +111,77 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]client.Clien
 	return clientDtoList, nil
 }
 
+func (c *ClientRepository) GetClientWithFilters(createdBy string, clientDto client.ClientDto) ([]client.ClientDto, error) {
+	primaryKeyExpressionList := []string{"#primaryKey = :primaryKey"}
+
+	attributeValues := map[string]any{
+		":primaryKey": createdBy,
+	}
+	filterExpressionList := make([]string, 0)
+	expressionAttributeNames := map[string]*string{
+		"#primaryKey": aws.String("primaryKey"),
+	}
+	if clientDto.Id != nil {
+		attributeValues[":id"] = *clientDto.Id
+		expressionAttributeNames["#id"] = aws.String("id")
+		primaryKeyExpressionList = append(primaryKeyExpressionList, "#id = :id")
+	}
+	if clientDto.Phone != nil {
+		attributeValues[":phone"] = *clientDto.Phone
+		expressionAttributeNames["#phone"] = aws.String("phone")
+		filterExpressionList = append(filterExpressionList, "#phone = :phone")
+	}
+	if clientDto.Email != nil {
+		attributeValues[":email"] = *clientDto.Email
+		expressionAttributeNames["#email"] = aws.String("email")
+		filterExpressionList = append(filterExpressionList, "#email = :email")
+	}
+
+	marshaledValues, err := dynamodbattribute.MarshalMap(attributeValues)
+
+	if err != nil {
+
+		log.Println(err.Error())
+
+		return nil, errors.New("error while retreiving clients")
+	}
+
+	filterExpression := strings.Join(filterExpressionList, " and ")
+	primaryKeyExpression := strings.Join(primaryKeyExpressionList, " and ")
+	queryInput := &dynamodb.QueryInput{
+		TableName:                 &ClientTable,
+		KeyConditionExpression:    aws.String(primaryKeyExpression),
+		ExpressionAttributeValues: marshaledValues,
+		ExpressionAttributeNames:  expressionAttributeNames,
+		FilterExpression:          &filterExpression,
+	}
+
+	output, err := c.Client.Query(queryInput)
+
+	if err != nil {
+
+		log.Println(err.Error())
+
+		return nil, errors.New("error while retreiving clients")
+	}
+
+	var clientEntityList []ClientEntity
+
+	err = dynamodbattribute.UnmarshalListOfMaps(output.Items, &clientEntityList)
+
+	if err != nil {
+
+		log.Println(err.Error())
+
+		return nil, errors.New("error while retreiving clients")
+	}
+	clientList := make([]client.ClientDto, len(clientEntityList))
+	for i, clientEntity := range clientEntityList {
+		clientList[i] = clientEntity.ToClientDto()
+	}
+	return clientList, nil
+}
+
 func (c *ClientRepository) CreateClient(clientDto client.ClientDto) (client.ClientDto, error) {
 	id := uuid.New().String()
 	clientDto.Id = &id
@@ -155,7 +226,7 @@ func (c *ClientRepository) UpdateUser(createdBy string, clientId string, clientD
 	expressionList := make([]string, 0)
 	updateExpressionValues := make(map[string]string)
 	updateExpressionNames := make(map[string]*string)
-	log.Println(clientDto)
+
 	if clientDto.ClientName != "" {
 		updateExpressionValues[":clientName"] = clientDto.ClientName
 		updateExpressionNames["#clientName"] = aws.String("clientName")
@@ -227,4 +298,64 @@ func (c *ClientRepository) UpdateUser(createdBy string, clientId string, clientD
 	}
 
 	return clientOuput.ToClientDto(), nil
+}
+
+func (c *ClientRepository) DeleteClient(createdBy, id string) error {
+
+	key, err := dynamodbattribute.MarshalMap(map[string]string{
+		"primaryKey": createdBy,
+		"sortKey":    id,
+	})
+
+	input := &dynamodb.DeleteItemInput{
+		TableName: &ClientTable,
+		Key:       key,
+	}
+	if err != nil {
+		log.Println(err.Error())
+		return errors.New("error While deleting Client")
+	}
+
+	if _, err := c.Client.DeleteItem(input); err != nil {
+		log.Println(err)
+		return errors.New("error While Deleting Client")
+	}
+
+	return nil
+}
+
+func (c *ClientRepository) GetClientById(createdBy, id string) (*client.ClientDto, error) {
+
+	key, err := dynamodbattribute.MarshalMap(map[string]string{
+		"primaryKey": createdBy,
+		"sortKey":    id,
+	})
+
+	input := &dynamodb.GetItemInput{
+		TableName: &ClientTable,
+		Key:       key,
+	}
+	if err != nil {
+		log.Println(err.Error())
+		return nil, errors.New("error While Getting Client")
+	}
+
+	if item, err := c.Client.Client.GetItem(input); err != nil {
+		log.Println(err)
+		return nil, errors.New("error While Getting Client")
+	} else {
+		var clientEntity ClientEntity
+
+		if len(item.Item) == 0 {
+			return nil, nil
+		}
+		err := dynamodbattribute.UnmarshalMap(item.Item, &clientEntity)
+
+		if err != nil {
+			return nil, errors.New("error While Getting Client")
+		}
+		dto := clientEntity.ToClientDto()
+		return &dto, nil
+	}
+
 }

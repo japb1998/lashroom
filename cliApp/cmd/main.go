@@ -7,12 +7,15 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/japb1998/lashroom/cliApp/internals/booksy"
 	"github.com/japb1998/lashroom/cliApp/internals/utils"
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
 	"github.com/japb1998/lashroom/shared/pkg/database"
 )
+
+var wg sync.WaitGroup
 
 func main() {
 
@@ -41,25 +44,47 @@ func main() {
 	clientService := client.NewClientService(store)
 
 	for _, customer := range customers {
+		wg.Add(1)
+		go func(customer booksy.BooksyClient) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Println("recovered from error:", r)
+				}
+			}()
 
-		clientPhone := utils.ExtractNumbers(customer.CellPhone)
+			clientPhone := utils.ExtractNumbers(customer.CellPhone)
 
-		newClient := client.ClientDto{
-			CreatedBy:  *createdBy,
-			Phone:      clientPhone,
-			Email:      &customer.Email,
-			ClientName: strings.Trim(fmt.Sprintf("%s %s", customer.FirstName, customer.LastName), ""),
-		}
+			newClient := client.ClientDto{
+				CreatedBy:  *createdBy,
+				Phone:      clientPhone,
+				Email:      &customer.Email,
+				ClientName: strings.Trim(fmt.Sprintf("%s %s", customer.FirstName, customer.LastName), ""),
+			}
 
-		newClient.Phone = utils.ExtractNumbers(*newClient.Phone)
+			clientList, err := clientService.Store.GetClientWithFilters(*createdBy, newClient)
 
-		c, err := clientService.CreateClient(newClient)
+			if err != nil {
+				fmt.Print(err.Error())
+				return
+			}
 
-		if err != nil {
-			fmt.Print(err.Error())
-		}
+			if len(clientList) > 0 {
+				log.Printf("Client name: %s, phone number: %s, exists", newClient.ClientName, *newClient.Phone)
+				return
+			}
 
-		log.Println("New Customer:", c.ClientName)
+			newClient.Phone = utils.ExtractNumbers(*newClient.Phone)
+
+			c, err := clientService.CreateClient(newClient)
+
+			if err != nil {
+				fmt.Print(err.Error())
+				return
+			}
+
+			log.Println("New Customer:", c.ClientName)
+		}(customer)
 	}
-
+	wg.Wait()
 }
