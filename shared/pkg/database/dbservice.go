@@ -10,6 +10,12 @@ type DynamoClient struct {
 	Client *dynamodb.DynamoDB
 }
 
+func NewDynamoClient() *DynamoClient {
+	return &DynamoClient{
+		Client: dynamodb.New(Session),
+	}
+}
+
 func (dynamodb *DynamoClient) Query(queryInput *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
 
 	output, err := dynamodb.Client.Query(queryInput)
@@ -56,6 +62,16 @@ func (dynamodb *DynamoClient) Scan(input *dynamodb.ScanInput) (*dynamodb.ScanOut
 func (dynamodb *DynamoClient) UpdateItem(input *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
 	if output, err := dynamodb.Client.UpdateItem(input); err != nil {
 
+		log.Println(err.Error())
+		return nil, err
+	} else {
+		return output, nil
+	}
+}
+
+func (dynamodb *DynamoClient) DeleteItem(input *dynamodb.DeleteItemInput) (*dynamodb.DeleteItemOutput, error) {
+
+	if output, err := dynamodb.Client.DeleteItem(input); err != nil {
 		log.Println(err.Error())
 		return nil, err
 	} else {
