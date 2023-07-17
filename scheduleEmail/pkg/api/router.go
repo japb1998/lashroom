@@ -3,7 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
+<<<<<<< HEAD
 	"fmt"
+=======
+>>>>>>> 4078e69fcef3a2f18b09fd9792437d6e202b96f6
 	"io"
 	"log"
 	"net/http"
@@ -21,7 +24,10 @@ import (
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	sqsRecord "github.com/japb1998/lashroom/clientQueue/pkg/record"
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
+<<<<<<< HEAD
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/notification"
+=======
+>>>>>>> 4078e69fcef3a2f18b09fd9792437d6e202b96f6
 	"github.com/japb1998/lashroom/shared/pkg/database"
 	"github.com/japb1998/lashroom/shared/pkg/record"
 )
