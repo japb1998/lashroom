@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	sqsRecord "github.com/japb1998/lashroom/clientQueue/pkg/record"
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
+	"github.com/japb1998/lashroom/scheduleEmail/pkg/notification"
 	"github.com/japb1998/lashroom/shared/pkg/database"
 	"github.com/japb1998/lashroom/shared/pkg/record"
 )
@@ -324,6 +326,30 @@ func Serve() {
 			c.JSON(http.StatusOK, gin.H{
 				"new": dto,
 			})
+		})
+		schedule.DELETE("/:notificationId", func(c *gin.Context) {
+
+			userEmail := c.MustGet("email").(string)
+			notificationId, _ := c.Params.Get("id")
+
+			client := database.NewDynamoClient()
+			notificationStore := database.NotificationRepository{
+				Client: client,
+			}
+
+			notificationService := notification.NewNotificationService(&notificationStore)
+
+			err := notificationService.DeleteNotification(userEmail, notificationId)
+
+			if err != nil {
+				log.Println(err.Error())
+
+				c.AbortWithError(http.StatusBadGateway, fmt.Errorf("error while deleting user"))
+
+				return
+			}
+
+			c.AbortWithStatus(http.StatusNoContent)
 		})
 	}
 
