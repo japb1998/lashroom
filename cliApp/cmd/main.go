@@ -1,71 +1,90 @@
 package main
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
+	"strings"
+	"sync"
+
+	"github.com/japb1998/lashroom/cliApp/internals/booksy"
+	"github.com/japb1998/lashroom/cliApp/internals/utils"
+	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
+	"github.com/japb1998/lashroom/shared/pkg/database"
 )
+
+var wg sync.WaitGroup
 
 func main() {
 
-	clientID := os.Getenv("CLIENT_ID")
-	clientSecret := os.Getenv("CLIENT_SECRET")
-	data := url.Values{}
+	fullPath := flag.String("path", "", "Full Path to json file to upload")
+	createdBy := flag.String("creator", "", "Email to attach the clients to")
+	flag.Parse()
+	fmt.Println("path", *fullPath, "creator", *createdBy)
 
-	data.Set("Authorization", base64.StdEncoding.Strict().EncodeToString([]byte(clientID+":"+clientSecret)))
-	data.Set("grant_type", "client_credentials")
-	data.Set("client_id", clientID)
-	data.Set("client_secret", clientSecret)
-	data.Set("scope", "https://938f97v570.execute-api.us-east-1.amazonaws.com/read https://938f97v570.execute-api.us-east-1.amazonaws.com/write")
-	url := "https://lashroombyeli.auth.us-east-1.amazoncognito.com/oauth2/token"
+	if len(*fullPath) < 1 || len(*createdBy) < 1 {
+		panic("Full path and creator are required")
+	}
 
-	res, err := http.Post(url, "application/x-www-form-urlencoded", bytes.NewBuffer([]byte(data.Encode())))
+	data, err := os.ReadFile(*fullPath)
 
 	if err != nil {
 		log.Fatal(err.Error())
 		return
 	}
 
-	log.Println(res.StatusCode)
+	var customers []booksy.BooksyClient
+	if err := json.Unmarshal(data, &customers); err != nil {
+		panic("Unable to parse clients from provided json")
+	}
 
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	var response map[string]any
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	token := fmt.Sprintf("%s %s", response["token_type"], response["access_token"])
-	fmt.Println(token)
-	client := http.Client{}
-	post, err := http.NewRequest("POST", url, nil)
-	post.Header.Add("Authorization", token)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	// get, err := http.NewRequest("POST", "https://938f97v570.execute-api.us-east-1.amazonaws.com/dev/schedule", nil)
+	store := database.NewClientRepository()
+	clientService := client.NewClientService(store)
 
-	// get.Header.Add("Authorization", token)
+	for _, customer := range customers {
+		wg.Add(1)
+		go func(customer booksy.BooksyClient) {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Println("recovered from error:", r)
+				}
+			}()
 
-	res, err = client.Do(post)
-	if err != nil {
-		log.Fatal(err.Error())
+			clientPhone := utils.ExtractNumbers(customer.CellPhone)
+
+			newClient := client.ClientDto{
+				CreatedBy:  *createdBy,
+				Phone:      clientPhone,
+				Email:      &customer.Email,
+				ClientName: strings.Trim(fmt.Sprintf("%s %s", customer.FirstName, customer.LastName), ""),
+			}
+
+			clientList, err := clientService.Store.GetClientWithFilters(*createdBy, newClient)
+
+			if err != nil {
+				fmt.Print(err.Error())
+				return
+			}
+
+			if len(clientList) > 0 {
+				log.Printf("Client name: %s, phone number: %s, exists", newClient.ClientName, *newClient.Phone)
+				return
+			}
+
+			newClient.Phone = utils.ExtractNumbers(*newClient.Phone)
+
+			c, err := clientService.CreateClient(newClient)
+
+			if err != nil {
+				fmt.Print(err.Error())
+				return
+			}
+
+			log.Println("New Customer:", c.ClientName)
+		}(customer)
 	}
-	fmt.Printf(res.Status)
-	body, err = io.ReadAll(res.Body)
-	var schedules any
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	json.Unmarshal(body, &schedules)
-	fmt.Println(schedules)
-	os.Exit(0)
+	wg.Wait()
 }
