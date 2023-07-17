@@ -85,7 +85,7 @@ func Serve() {
 				var schedules []record.NewSchedule
 				records := make([]record.Record, 0) // []
 				err = dynamodbattribute.UnmarshalListOfMaps(output.Items, &schedules)
-				log.Printf("records: %v", records)
+
 				if err != nil {
 					log.Println(err)
 					c.AbortWithError(http.StatusBadGateway, errors.New("error while getting schedules"))
