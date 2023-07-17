@@ -68,3 +68,13 @@ func (dynamodb *DynamoClient) UpdateItem(input *dynamodb.UpdateItemInput) (*dyna
 		return output, nil
 	}
 }
+
+func (dynamodb *DynamoClient) DeleteItem(input *dynamodb.DeleteItemInput) (*dynamodb.DeleteItemOutput, error) {
+
+	if output, err := dynamodb.Client.DeleteItem(input); err != nil {
+		log.Println(err.Error())
+		return nil, err
+	} else {
+		return output, nil
+	}
+}

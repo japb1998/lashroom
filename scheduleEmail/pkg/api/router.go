@@ -414,9 +414,46 @@ func Serve() {
 			c.JSON(http.StatusOK, client)
 		}
 	})
+	clients.GET("/:id", func(c *gin.Context) {
+		userEmail := c.MustGet("email").(string)
+		clientId, _ := c.Params.Get("id")
+
+		store := database.NewClientRepository()
+		clientService := client.NewClientService(store)
+
+		client, err := clientService.GetClientById(userEmail, clientId)
+
+		if err != nil {
+			log.Println(err.Error())
+			c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
+			return
+		} else if client == nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		c.JSON(http.StatusOK, client)
+	})
+	clients.DELETE("/:id", func(c *gin.Context) {
+		userEmail := c.MustGet("email").(string)
+		clientId, _ := c.Params.Get("id")
+
+		store := database.NewClientRepository()
+		clientService := client.NewClientService(store)
+
+		err := clientService.DeleteClient(userEmail, clientId)
+
+		if err != nil {
+			log.Println(err.Error())
+			c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
+			return
+		}
+
+		c.AbortWithStatus(http.StatusNoContent)
+	})
 
 	if os.Getenv("STAGE") == "local" {
-		if err := r.Run(); err != nil {
+		if err := r.Run(os.Getenv("PORT")); err != nil {
 			log.Fatal("Error while starting the server")
 		}
 	} else {
