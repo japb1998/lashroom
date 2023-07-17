@@ -14,10 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	"github.com/japb1998/lashroom/clientQueue/pkg/record"
-<<<<<<< HEAD
-	"github.com/japb1998/lashroom/shared/pkg/client"
-=======
->>>>>>> d8750a2d83ce9cb9c067c6e9560f0b1cc3a27d6f
 	"github.com/japb1998/lashroom/shared/pkg/database"
 )
 
@@ -119,19 +115,12 @@ func processClientMessage(ddb database.DynamoClient, messages events.SQSMessage)
 		}
 	}
 
-<<<<<<< HEAD
-	newClient := client.ClientEntity{
-=======
 	newClient := database.ClientEntity{
->>>>>>> d8750a2d83ce9cb9c067c6e9560f0b1cc3a27d6f
 		PrimaryKey: ev.Body["createdBy"].(string),
 		SortKey:    uuid.New().String(),
 		Email:      clientEmail,
 		Phone:      clientPhone,
-<<<<<<< HEAD
-=======
 		ClientName: ev.Body["clientName"].(string),
->>>>>>> d8750a2d83ce9cb9c067c6e9560f0b1cc3a27d6f
 	}
 	item, err := dynamodbattribute.MarshalMap(newClient)
 
