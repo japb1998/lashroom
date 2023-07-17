@@ -3,10 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
-<<<<<<< HEAD
 	"fmt"
-=======
->>>>>>> 4078e69fcef3a2f18b09fd9792437d6e202b96f6
 	"io"
 	"log"
 	"net/http"
@@ -24,10 +21,7 @@ import (
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	sqsRecord "github.com/japb1998/lashroom/clientQueue/pkg/record"
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
-<<<<<<< HEAD
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/notification"
-=======
->>>>>>> 4078e69fcef3a2f18b09fd9792437d6e202b96f6
 	"github.com/japb1998/lashroom/shared/pkg/database"
 	"github.com/japb1998/lashroom/shared/pkg/record"
 )
@@ -57,6 +51,8 @@ func Serve() {
 	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
 	r.Use(cors.New(corsConfig))
 	r.Use(currentUserMiddleWare())
+
+	// NOTIFICATIONS ROUTER
 	schedule := r.Group("/schedule")
 	{
 		schedule.GET("", func(c *gin.Context) {
@@ -333,7 +329,7 @@ func Serve() {
 				"new": dto,
 			})
 		})
-		schedule.DELETE("/:notificationId", func(c *gin.Context) {
+		schedule.DELETE("/:id", func(c *gin.Context) {
 
 			userEmail := c.MustGet("email").(string)
 			notificationId, _ := c.Params.Get("id")
@@ -350,7 +346,7 @@ func Serve() {
 			if err != nil {
 				log.Println(err.Error())
 
-				c.AbortWithError(http.StatusBadGateway, fmt.Errorf("error while deleting user"))
+				c.AbortWithError(http.StatusBadGateway, fmt.Errorf("error while deleting notification"))
 
 				return
 			}
@@ -359,130 +355,133 @@ func Serve() {
 		})
 	}
 
+	//CLIENT ROUTER
 	clients := r.Group("/clients")
-	clients.GET("", func(c *gin.Context) {
+	{
+		clients.GET("", func(c *gin.Context) {
 
-		userEmail := c.MustGet("email").(string)
-		store := database.NewClientRepository()
-		clientService := client.NewClientService(store)
+			userEmail := c.MustGet("email").(string)
+			store := database.NewClientRepository()
+			clientService := client.NewClientService(store)
 
-		if clientDtoList, err := clientService.GetClientsByCreator(userEmail); err != nil {
+			if clientDtoList, err := clientService.GetClientsByCreator(userEmail); err != nil {
 
-			log.Println(err.Error())
-			c.AbortWithStatusJSON(http.StatusBadGateway, map[string]string{
-				"message": "Error while retreiving clients",
-			})
+				log.Println(err.Error())
+				c.AbortWithStatusJSON(http.StatusBadGateway, map[string]string{
+					"message": "Error while retreiving clients",
+				})
 
-		} else {
+			} else {
 
-			c.JSON(http.StatusOK, gin.H{
-				"records": clientDtoList,
-				"count":   len(clientDtoList),
-			})
-		}
-	})
+				c.JSON(http.StatusOK, gin.H{
+					"records": clientDtoList,
+					"count":   len(clientDtoList),
+				})
+			}
+		})
 
-	clients.POST("", func(c *gin.Context) {
-		userEmail := c.MustGet("email").(string)
-		var clientDto client.ClientDto
-		store := database.NewClientRepository()
-		clientService := client.NewClientService(store)
-		body, err := io.ReadAll(c.Request.Body)
+		clients.POST("", func(c *gin.Context) {
+			userEmail := c.MustGet("email").(string)
+			var clientDto client.ClientDto
+			store := database.NewClientRepository()
+			clientService := client.NewClientService(store)
+			body, err := io.ReadAll(c.Request.Body)
 
-		if err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
-			return
-		}
+			if err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
+				return
+			}
 
-		err = json.Unmarshal(body, &clientDto)
-		clientDto.CreatedBy = userEmail
+			err = json.Unmarshal(body, &clientDto)
+			clientDto.CreatedBy = userEmail
 
-		if err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "invalid json body",
-			})
-		}
+			if err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "invalid json body",
+				})
+			}
 
-		if client, err := clientService.CreateClient(clientDto); err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"error": "error updating user",
-			})
-		} else {
+			if client, err := clientService.CreateClient(clientDto); err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+					"error": "error updating user",
+				})
+			} else {
+				c.JSON(http.StatusOK, client)
+			}
+
+		})
+		clients.PATCH("/:id", func(c *gin.Context) {
+			userEmail := c.MustGet("email").(string)
+			clientId, _ := c.Params.Get("id")
+			var clientDto client.ClientDto
+			store := database.NewClientRepository()
+			clientService := client.NewClientService(store)
+			body, err := io.ReadAll(c.Request.Body)
+
+			if err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
+				return
+			}
+
+			err = json.Unmarshal(body, &clientDto)
+			if err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "invalid json body",
+				})
+			}
+
+			if client, err := clientService.UpdateUser(userEmail, clientId, clientDto); err != nil {
+				log.Println(err)
+				c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
+					"error": "error updating user",
+				})
+			} else {
+				c.JSON(http.StatusOK, client)
+			}
+		})
+		clients.GET("/:id", func(c *gin.Context) {
+			userEmail := c.MustGet("email").(string)
+			clientId, _ := c.Params.Get("id")
+
+			store := database.NewClientRepository()
+			clientService := client.NewClientService(store)
+
+			client, err := clientService.GetClientById(userEmail, clientId)
+
+			if err != nil {
+				log.Println(err.Error())
+				c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
+				return
+			} else if client == nil {
+				c.AbortWithStatus(http.StatusNotFound)
+				return
+			}
+
 			c.JSON(http.StatusOK, client)
-		}
+		})
+		clients.DELETE("/:id", func(c *gin.Context) {
+			userEmail := c.MustGet("email").(string)
+			clientId, _ := c.Params.Get("id")
 
-	})
-	clients.PATCH("/:id", func(c *gin.Context) {
-		userEmail := c.MustGet("email").(string)
-		clientId, _ := c.Params.Get("id")
-		var clientDto client.ClientDto
-		store := database.NewClientRepository()
-		clientService := client.NewClientService(store)
-		body, err := io.ReadAll(c.Request.Body)
+			store := database.NewClientRepository()
+			clientService := client.NewClientService(store)
 
-		if err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadRequest, "invalid Body")
-			return
-		}
+			err := clientService.DeleteClient(userEmail, clientId)
 
-		err = json.Unmarshal(body, &clientDto)
-		if err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "invalid json body",
-			})
-		}
+			if err != nil {
+				log.Println(err.Error())
+				c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
+				return
+			}
 
-		if client, err := clientService.UpdateUser(userEmail, clientId, clientDto); err != nil {
-			log.Println(err)
-			c.AbortWithStatusJSON(http.StatusBadGateway, gin.H{
-				"error": "error updating user",
-			})
-		} else {
-			c.JSON(http.StatusOK, client)
-		}
-	})
-	clients.GET("/:id", func(c *gin.Context) {
-		userEmail := c.MustGet("email").(string)
-		clientId, _ := c.Params.Get("id")
-
-		store := database.NewClientRepository()
-		clientService := client.NewClientService(store)
-
-		client, err := clientService.GetClientById(userEmail, clientId)
-
-		if err != nil {
-			log.Println(err.Error())
-			c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
-			return
-		} else if client == nil {
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-
-		c.JSON(http.StatusOK, client)
-	})
-	clients.DELETE("/:id", func(c *gin.Context) {
-		userEmail := c.MustGet("email").(string)
-		clientId, _ := c.Params.Get("id")
-
-		store := database.NewClientRepository()
-		clientService := client.NewClientService(store)
-
-		err := clientService.DeleteClient(userEmail, clientId)
-
-		if err != nil {
-			log.Println(err.Error())
-			c.AbortWithError(http.StatusBadGateway, errors.New("error while deleting user"))
-			return
-		}
-
-		c.AbortWithStatus(http.StatusNoContent)
-	})
+			c.AbortWithStatus(http.StatusNoContent)
+		})
+	}
 
 	if os.Getenv("STAGE") == "local" {
 		if err := r.Run(os.Getenv("PORT")); err != nil {
