@@ -3,7 +3,6 @@ service: ${env:APP_ID}
 frameworkVersion: '3'
 
 plugins:
-  - serverless-offline
   - serverless-lift
 
 useDotenv: true

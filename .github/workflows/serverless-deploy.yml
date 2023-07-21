@@ -1,0 +1,40 @@
+name: Serverless deploy
+run-name: ${{ github.actor }} is deploying on GitHub Actions 🚀
+env:
+  APP_ID: salonBoost
+  USER_POOL_ID: ${{secrets.USER_POOL_ID}}
+  EMAIL_API_KEY: ${{secrets.EMAIL_API_KEY}}
+  TWILIO_ACCOUNT_SID: ${{secrets.TWILIO_ACCOUNT_SID}}
+  TWILIO_AUTH_TOKEN: ${{secrets.TWILIO_AUTH_TOKEN}}
+  MESSAGING_SERVICE_SID: ${{secrets.MESSAGING_SERVICE_SID}}
+on:
+  push:
+    branches:
+      - "main"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      - run: echo Build Starts Now
+      - name: Build
+        run: make build
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: serverless deploy
+        uses: serverless/github-action@v3.2
+        with:
+          args: -c "serverless plugin install --name serverless-lift && serverless deploy"
+          entrypoint: /bin/sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
