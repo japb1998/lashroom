@@ -11,6 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"image"
+	"image/color"
+	"image/png"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -480,6 +484,41 @@ func Serve() {
 			}
 
 			c.AbortWithStatus(http.StatusNoContent)
+		})
+	}
+
+	tracking := r.Group("/pixel")
+
+	{
+		tracking.GET("/:clientId/:notificationId", func(c *gin.Context) {
+			c.Header("Content-Type", "image/png")
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
+			clientIP := c.GetHeader("X-Real-IP")
+			if clientIP == "" {
+				clientIP = c.GetHeader("X-Forwarded-For")
+			}
+
+			if clientIP == "" {
+				// If the headers are not present, use the RemoteAddr field
+				clientIP = c.ClientIP()
+			}
+
+			fmt.Println("IP", clientIP)
+
+			for k, v := range c.Request.Header {
+				log.Println("Header:", k, "Val", v)
+			}
+			img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+			img.Set(0, 0, color.Transparent)
+
+			err := png.Encode(c.Writer, img)
+
+			if err != nil {
+				c.AbortWithStatus(500)
+			}
+
 		})
 	}
 
