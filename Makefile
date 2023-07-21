@@ -2,9 +2,9 @@
 
 build: 
 	export GO111MODULE=on
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleEmail ./scheduleEmail/cmd
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/scheduleCheck ./scheduleCheck/cmd
-	env GOARCH=amd64 GOOS=linux go build -ldflags="-s -w" -o ./bin/queueHandler ./clientQueue/cmd/main.go
+	env GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -ldflags="-s -w" -o ./bin/scheduleEmail ./scheduleEmail/cmd
+	env GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -ldflags="-s -w" -o ./bin/scheduleCheck ./scheduleCheck/cmd
+	env GOARCH=amd64 GOOS=linux CGO_ENABLED=0 go build -ldflags="-s -w" -o ./bin/queueHandler ./clientQueue/cmd/main.go
 	go build -o ./bin/cliApp ./cliApp/cmd
 clean:
 	rm -rf ./bin ./vendor go.sum
