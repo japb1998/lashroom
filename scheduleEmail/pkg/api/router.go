@@ -25,10 +25,7 @@ import (
 	"github.com/japb1998/lashroom/clientQueue/pkg/operations"
 	sqsRecord "github.com/japb1998/lashroom/clientQueue/pkg/record"
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
-<<<<<<< HEAD
 	"github.com/japb1998/lashroom/scheduleEmail/pkg/notification"
-=======
->>>>>>> main
 	"github.com/japb1998/lashroom/shared/pkg/database"
 	"github.com/japb1998/lashroom/shared/pkg/record"
 )

@@ -103,9 +103,9 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]client.Clien
 	var clientDtoList = make([]client.ClientDto, len(clientEntityList))
 
 	for i, entity := range clientEntityList {
-		log.Println(entity.ClientName, entity.SortKey)
+
 		clientDtoList[i] = entity.ToClientDto()
-		log.Println(clientDtoList[i].ClientName, *clientDtoList[i].Id)
+
 	}
 
 	return clientDtoList, nil
