@@ -7,10 +7,10 @@ env:
   TWILIO_ACCOUNT_SID: ${{secrets.TWILIO_ACCOUNT_SID}}
   TWILIO_AUTH_TOKEN: ${{secrets.TWILIO_AUTH_TOKEN}}
   MESSAGING_SERVICE_SID: ${{secrets.MESSAGING_SERVICE_SID}}
-on: [push]
-  # push:
-  #   branches:
-  #     - "main"
+on:
+  push:
+    branches:
+      - "main"
 jobs:
   build:
     runs-on: ubuntu-latest
