@@ -8,6 +8,9 @@ env:
   TWILIO_AUTH_TOKEN: ${{secrets.TWILIO_AUTH_TOKEN}}
   MESSAGING_SERVICE_SID: ${{secrets.MESSAGING_SERVICE_SID}}
 on: [push]
+  # push:
+  #   branches:
+  #     - "main"
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,7 +30,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm install -g serverless-lift
+      - run: serverless plugin install -n serverless-lift
       - name: serverless deploy
         uses: serverless/github-action@v3.2
         with:
