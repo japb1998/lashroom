@@ -245,9 +245,6 @@ func (r *notificationRepository) GetNotificationsByCreator(createdBy string, ops
 		},
 		ExclusiveStartKey: LastEvaluatedKey,
 	}
-	if ops.Limit > 0 && ops.Skip == 0 {
-		input.Limit = aws.Int64(int64(ops.Limit))
-	}
 	for {
 		output, err := r.client.Query(input)
 		if err != nil {

@@ -229,11 +229,6 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 
 	queryInput.KeyConditionExpression = aws.String(strings.Join(primaryKeyExpressionList, " and "))
 
-	// if any limit is setup
-	if p.Limit > 0 && p.Skip == 0 {
-		queryInput.Limit = aws.Int64(int64(p.Limit))
-	}
-
 	// loop until lastEvaluated key is nil or we reach our limit setup by the pagination.
 	for {
 		var clients []model.ClientItem
