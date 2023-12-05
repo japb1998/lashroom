@@ -1,0 +1,426 @@
+definitions:
+  controller.Notification:
+    properties:
+      client:
+        $ref: '#/definitions/service.ClientDto'
+      createdBy:
+        type: string
+      date:
+        type: string
+      deliveryMethods:
+        items:
+          type: integer
+        type: array
+      id:
+        type: string
+      status:
+        type: string
+    type: object
+  controller.PaginatedNotifications:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/controller.Notification'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
+  service.ClientDto:
+    properties:
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      description:
+        type: string
+      email:
+        type: string
+      firstName:
+        type: string
+      id:
+        type: string
+      lastName:
+        type: string
+      lastUpdateAt:
+        type: string
+      optIn:
+        type: boolean
+      phone:
+        type: string
+    type: object
+  service.CreateClient:
+    properties:
+      createdAt:
+        type: string
+      description:
+        maxLength: 255
+        minLength: 2
+        type: string
+      email:
+        type: string
+      firstName:
+        type: string
+      lastName:
+        type: string
+      lastUpdateAt:
+        type: string
+      phone:
+        type: string
+    required:
+    - firstName
+    - lastName
+    type: object
+  service.FiltersResponseDto:
+    properties:
+      count:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/service.ClientDto'
+        type: array
+    type: object
+  service.Notification:
+    properties:
+      clientId:
+        type: string
+      clientToken:
+        type: string
+      createdBy:
+        type: string
+      date:
+        type: string
+      deliveryMethods:
+        items:
+          type: integer
+        minItems: 1
+        type: array
+      id:
+        type: string
+      status:
+        type: string
+    required:
+    - clientId
+    - createdBy
+    - date
+    - deliveryMethods
+    - id
+    - status
+    type: object
+  service.NotificationInput:
+    properties:
+      clientId:
+        type: string
+      date:
+        type: string
+      deliveryMethods:
+        items:
+          type: integer
+        minItems: 1
+        type: array
+    required:
+    - clientId
+    - date
+    - deliveryMethods
+    type: object
+  service.PatchClient:
+    properties:
+      description:
+        maxLength: 255
+        minLength: 2
+        type: string
+      email:
+        type: string
+      firstName:
+        minLength: 1
+        type: string
+      lastName:
+        minLength: 1
+        type: string
+      optIn:
+        type: boolean
+      phone:
+        type: string
+    type: object
+  service.PatchNotification:
+    properties:
+      clientId:
+        type: string
+      date:
+        type: string
+      deliveryMethods:
+        items:
+          type: integer
+        type: array
+      status:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /clients:
+    get:
+      description: get clients by creator with filters.
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Phone number to filter by
+        in: query
+        name: phone
+        type: string
+      - description: email to filter by
+        in: query
+        name: email
+        type: string
+      - description: First Name to filter by
+        in: query
+        name: firstName
+        type: string
+      - description: Last Name to filter by
+        in: query
+        name: lastName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.FiltersResponseDto'
+      summary: get clients by creator with filters.
+      tags:
+      - CLIENT
+    post:
+      consumes:
+      - application/json
+      description: create client.
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: create client dto
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.CreateClient'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.ClientDto'
+      summary: create client.
+      tags:
+      - CLIENT
+  /clients/{createdBy}/{id}:
+    get:
+      description: mark client as not available for notifications.
+      parameters:
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Client ID
+        in: path
+        name: createdBy
+        required: true
+        type: string
+      responses:
+        "301":
+          description: Moved Permanently
+      summary: mark client as not available for notifications.
+      tags:
+      - CLIENT
+  /clients/{id}:
+    delete:
+      description: delete client by ID.
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.ClientDto'
+      summary: delete client by ID.
+      tags:
+      - CLIENT
+    get:
+      description: Get client by ID
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: Client ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.ClientDto'
+      summary: Get client by ID
+      tags:
+      - CLIENT
+    patch:
+      description: update client.
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: patch client dto
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.PatchClient'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.ClientDto'
+      summary: update client.
+      tags:
+      - CLIENT
+  /schedule:
+    get:
+      consumes:
+      - application/json
+      description: gets schedule by the user email obtained in the JWT token
+      parameters:
+      - default: 0
+        description: Zero indexed
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.PaginatedNotifications'
+      summary: get schedules by creator.
+      tags:
+      - SCHEDULES
+    post:
+      consumes:
+      - application/json
+      description: create schedule.
+      parameters:
+      - description: body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.NotificationInput'
+      responses:
+        "204":
+          description: No Content
+      summary: create schedule.
+      tags:
+      - SCHEDULES
+  /schedule/{id}:
+    delete:
+      description: deletes a schedule from both the scheduler service and db.
+      parameters:
+      - description: Schedule ID
+        in: path
+        name: id
+        type: string
+      responses:
+        "204":
+          description: No Content
+      summary: deletes a schedule from both the scheduler service and db.
+      tags:
+      - SCHEDULES
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: Bearer token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: schedule ID
+        in: path
+        name: id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/controller.PaginatedNotifications'
+      summary: get schedules by creator.
+      tags:
+      - SCHEDULES
+    patch:
+      consumes:
+      - application/json
+      description: patch existing schedule by id.
+      parameters:
+      - description: Schedule ID
+        in: path
+        name: id
+        type: string
+      - description: Bearer token
+        in: header
+        name: token
+        required: true
+        type: string
+      - description: body
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/service.PatchNotification'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/service.Notification'
+      summary: patch existing schedule by id.
+      tags:
+      - SCHEDULES
+swagger: "2.0"
