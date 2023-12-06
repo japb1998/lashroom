@@ -18,14 +18,14 @@ import (
 	"github.com/japb1998/control-tower/internal/service"
 	"github.com/japb1998/control-tower/pkg/credentials"
 	"github.com/japb1998/control-tower/pkg/email"
-	"github.com/japb1998/control-tower/pkg/sms"
 	"github.com/joho/godotenv"
 )
 
 var notificationSvc *service.NotificationService
 var emailSvc *email.EmailService
 var clientSvc *service.ClientService
-var msgSvc *sms.MsgSvc
+
+// var msgSvc *sms.MsgSvc
 var apiUrl = os.Getenv("API_URL")
 var handlerLogger = log.New(os.Stdin, "[Handler] ", log.Default().Flags())
 
@@ -145,7 +145,7 @@ func init() {
 	scheduler := scheduler.NewScheduler(sess)
 
 	// message service
-	msgSvc = sms.MusInitMsgSvc(os.Getenv("TWILIO_NUMBER"))
+	// msgSvc = sms.MusInitMsgSvc(os.Getenv("TWILIO_NUMBER"))
 
 	// notification
 	notificationStore := database.NewNotificationRepository(sess)

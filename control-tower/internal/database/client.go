@@ -175,6 +175,8 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 	var queryInput = &dynamodb.QueryInput{
 		TableName:         &c.tableName,
 		ExclusiveStartKey: lastEvaluatedKey,
+		Limit:             aws.Int64(int64(p.Skip + p.Limit)),
+		ScanIndexForward:  aws.Bool(true),
 	}
 	primaryKeyExpressionList := []string{"#primaryKey = :primaryKey"}
 
@@ -231,6 +233,9 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 
 	// loop until lastEvaluated key is nil or we reach our limit setup by the pagination.
 	for {
+		if len(clientEntityList) != 0 {
+			queryInput.Limit = aws.Int64(int64(p.Limit + p.Skip - len(clientEntityList)))
+		}
 		var clients []model.ClientItem
 		// lastEvaluated key everytime we start. 1st is nil
 		queryInput.ExclusiveStartKey = lastEvaluatedKey
