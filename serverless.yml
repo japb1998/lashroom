@@ -77,7 +77,7 @@ resources:
             AttributeType: "S"
           - AttributeName: sortKey
             AttributeType: "S"
-          - AttributeName: status
+          - AttributeName: date
             AttributeType: "S"
         KeySchema:
           - AttributeName: primaryKey
@@ -88,11 +88,11 @@ resources:
           AttributeName: TTL
           Enabled: true
         GlobalSecondaryIndexes:
-          - IndexName: STATUS
+          - IndexName: DATE
             KeySchema:
-              - AttributeName: status
-                KeyType: HASH
               - AttributeName: primaryKey
+                KeyType: HASH
+              - AttributeName: date
                 KeyType: RANGE
             Projection: 
               ProjectionType: ALL
