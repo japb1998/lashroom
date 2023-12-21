@@ -55,7 +55,6 @@ func currentUserMiddleWare() gin.HandlerFunc {
 			return
 		}
 		c.Set("email", email)
-
 		c.Next()
 	}
 }

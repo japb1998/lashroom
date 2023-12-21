@@ -58,7 +58,7 @@ func InitRoutes() *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
 
-	r.Use(otelgin.Middleware("api"))
+	r.Use(otelgin.Middleware(ScopeName))
 
 	r.Use(cors.New(corsConfig))
 
