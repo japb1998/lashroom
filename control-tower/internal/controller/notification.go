@@ -184,6 +184,8 @@ func GetSchedule(c *gin.Context) {
 // @Success 204
 // @Router /schedule [post]
 func PostSchedule(c *gin.Context) {
+	ctx, startSpan := tracer.Start(c.Request.Context(), "post-schedule")
+	defer startSpan.End()
 	defer c.Request.Body.Close()
 	userEmail := c.MustGet("email").(string)
 	var schedule service.NotificationInput
@@ -210,6 +212,7 @@ func PostSchedule(c *gin.Context) {
 		})
 		return
 	}
+	_, clientSpan := tracer.Start(ctx, "get-client")
 
 	user, err := clientService.GetClientById(userEmail, schedule.ClientId)
 
@@ -218,15 +221,18 @@ func PostSchedule(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create schedule",
 		})
+		clientSpan.End()
 		return
 	}
-
+	clientSpan.End()
 	if *user.OptIn == false {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("Client ID='%s' has notifications disabled.", user.Id),
 		})
 		return
 	}
+
+	_, scheduleSpan := tracer.Start(ctx, "create-schedule")
 
 	err = notificationService.ScheduleNotification(userEmail, &schedule)
 
@@ -240,13 +246,14 @@ func PostSchedule(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create schedule",
 		})
+		scheduleSpan.End()
 		return
 	}
-
+	scheduleSpan.End()
 	c.Writer.WriteHeader(204)
 }
 
-// UpdateSchedule creates schedule.
+// UpdateSchedule updates schedule.
 // @Summary patch existing schedule by id.
 // @Schemes
 // @Description patch existing schedule by id.

@@ -9,20 +9,26 @@ import (
 )
 
 type MsgSvc struct {
-	Client       *twilio.RestClient
-	SenderNumber string `validate:"e164"` //sender phone number
+	Client             *twilio.RestClient
+	MessagingServiceId string `validate:"required"` //sender phone number
 }
 
+// Msg. TemplateVariables is the json containing the variables to be replaces in the template
 type Msg struct {
-	Body string `validate:"min=2"`
-	To   string `validate:"e164"`
+	TemplateId        string
+	TemplateVariables []byte // json
+	To                string `validate:"e164"`
 }
 
-func (svc *MsgSvc) sendMessage(msg *Msg) error {
+func (svc *MsgSvc) SendMessage(msg *Msg) error {
 	params := &openapi.CreateMessageParams{}
 	params.SetTo(fmt.Sprintf("whatsapp:%s", msg.To))
-	params.SetFrom(fmt.Sprintf("whatsapp:%s", svc.SenderNumber))
-	params.SetBody(msg.Body)
+	params.SetFrom(svc.MessagingServiceId)
+	params.SetContentSid(msg.TemplateId)
+
+	if msg.TemplateVariables != nil {
+		params.SetContentVariables(string(msg.TemplateVariables))
+	}
 
 	_, err := svc.Client.Api.CreateMessage(params)
 	if err != nil {
@@ -33,10 +39,10 @@ func (svc *MsgSvc) sendMessage(msg *Msg) error {
 }
 
 // MustInitSvc returns a MsgSvc or panics if error.
-func MusInitMsgSvc(twilioN string) *MsgSvc {
+func MusInitMsgSvc(serviceId string) *MsgSvc {
 	svc := &MsgSvc{
-		Client:       twilio.NewRestClient(),
-		SenderNumber: twilioN,
+		Client:             twilio.NewRestClient(),
+		MessagingServiceId: serviceId,
 	}
 	validate := validator.New(validator.WithRequiredStructEnabled())
 

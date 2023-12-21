@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/japb1998/control-tower/internal/scheduler"
 	"github.com/japb1998/control-tower/internal/service"
 	"github.com/joho/godotenv"
+	"go.opentelemetry.io/otel"
 )
 
 func init() {
@@ -18,11 +20,12 @@ func init() {
 
 	switch os.Getenv("STAGE") {
 	case "local":
-		err := godotenv.Load(".env")
+		fmt.Println("init local")
+		err := godotenv.Load(".env", "./control-tower/.env")
 		if err != nil {
 			log.Fatalf("Error loading env vars: %s", err)
 		}
-
+		fmt.Println("local", os.Getenv("EMAIL_TABLE"))
 		sess = session.Must(session.NewSessionWithOptions(session.Options{
 			SharedConfigState: session.SharedConfigEnable,
 			Profile:           "personal",
@@ -43,4 +46,7 @@ func init() {
 	clientStore := database.NewClientRepo(sess)
 	clientService = service.NewClientSvc(clientStore)
 	notificationLogger.Println("Controllers Initialized")
+
+	// initialize tracer
+	tracer = otel.Tracer("github.com/japb1998/control-tower/internal/controller")
 }

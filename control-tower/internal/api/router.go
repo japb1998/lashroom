@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -15,11 +14,10 @@ import (
 	"github.com/japb1998/control-tower/internal/controller"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Response events.APIGatewayProxyResponse
-
-var ginLambda *ginadapter.GinLambda
 
 var (
 	TableName    = os.Getenv("EMAIL_TABLE")
@@ -28,7 +26,7 @@ var (
 	routerLogger = log.New(os.Stdout, "[Router] ", log.Default().Flags())
 )
 
-func Serve() {
+func Serve() *gin.Engine {
 	routerLogger.Printf("Gin cold start")
 	r := gin.Default()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -56,7 +54,9 @@ func Serve() {
 	corsConfig.AllowHeaders = []string{"*"}
 	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
 	r.Use(cors.New(corsConfig))
-
+	if os.Getenv("STAGE") != "local" {
+		r.Use(otelgin.Middleware("api"))
+	}
 	// SWAGGER
 	docs.SwaggerInfo.BasePath = ""
 	{
@@ -89,12 +89,6 @@ func Serve() {
 		clients.DELETE("/:id", controller.DeleteClient)
 	}
 
-	if os.Getenv("STAGE") == "local" {
-		if err := r.Run(os.Getenv("PORT")); err != nil {
-			routerLogger.Fatal("Error while starting the server")
-		}
-	} else {
-		ginLambda = ginadapter.New(r)
-	}
+	return r
 
 }

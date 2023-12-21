@@ -11,10 +11,12 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/japb1998/control-tower/internal/service"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
 	clientLogger = log.New(os.Stdout, "[Client Controller] ", log.Default().Flags())
+	tracer       trace.Tracer
 )
 var clientService *service.ClientService
 
@@ -234,6 +236,9 @@ func OptOut(c *gin.Context) {
 // @Success 200 {object} service.FiltersResponseDto
 // @Router /clients [get]
 func ClientsWithFilters(c *gin.Context) {
+	ctx, span := tracer.Start(c.Request.Context(), "client-with-filter-controller")
+	defer span.End()
+
 	requestorEmail := c.MustGet("email").(string)
 	var paginationDto service.ClientPaginationDto
 	if err := c.ShouldBindWith(&paginationDto, binding.Query); err != nil {
@@ -263,6 +268,9 @@ func ClientsWithFilters(c *gin.Context) {
 	if paginationDto.Limit == 0 {
 		paginationDto.Limit = 10
 	}
+
+	_, childSpan := tracer.Start(ctx, "service-call")
+	defer childSpan.End()
 
 	if response, err := clientService.GetClientWithFilters(requestorEmail, paginationDto); err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{

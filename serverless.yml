@@ -16,7 +16,10 @@ provider:
   tags:
     project: "control-tower"
   
-
+custom:
+  deploymentBucket:
+    name: ${env:APP_ID}
+    serverSideEncryption: AES256
 
 package:
     individually: true
@@ -42,6 +45,8 @@ functions:
           path: /unsubscribe/{proxy+}
           method: ANY
           cors: true
+    layers:
+      - arn:aws:lambda:us-east-1:901920570463:layer:aws-otel-collector-arm64-ver-0-66-0:1
     environment:
       EMAIL_TABLE: !Ref NotificationsTable
       CLIENT_TABLE: !Ref ClientTable
@@ -57,12 +62,18 @@ functions:
       artifact: bin/schedule-handler/schedule-handler.zip
     memorySize: 256
     timeout: 300
+    layers:
+      - arn:aws:lambda:us-east-1:901920570463:layer:aws-otel-collector-arm64-ver-0-66-0:1
     environment:
+      OTEL_SERVICE_NAME: control-tower
       EMAIL_TABLE: !Ref NotificationsTable
       CLIENT_TABLE: !Ref ClientTable
       MAIL_GUN_SECRET_ID: "${opt:stage, 'dev'}/control-tower/mailgun"
       API_URL: !Join ['', ['https://', !Ref ApiGatewayRestApi , '.execute-api.',  !Sub "${AWS::Region}", '.amazonaws.com/',  "${opt:stage, 'dev'}"]]
- 
+      TWILIO_SERVICE_ID: ${env:TWILIO_SERVICE_ID}
+      TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
+      TWILIO_TEMPLATE_ID: ${env:TWILIO_TEMPLATE_ID}
       
 # you can add CloudFormation resource templates here
 resources:
