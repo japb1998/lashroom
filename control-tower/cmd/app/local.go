@@ -60,9 +60,16 @@ func initProvider() (shutdown func(context.Context) error, err error) {
 
 func initApp() {
 	fmt.Println("init local environment")
+	ctx := context.Background()
 	shutdownFunc, err := initProvider()
+	defer shutdownFunc(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	api.Serve()
+	r := api.InitRoutes()
+
+	if err := r.Run(); err != nil {
+		log.Fatal(err)
+	}
+
 }

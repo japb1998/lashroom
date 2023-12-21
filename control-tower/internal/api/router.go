@@ -26,7 +26,11 @@ var (
 	routerLogger = log.New(os.Stdout, "[Router] ", log.Default().Flags())
 )
 
-func Serve() *gin.Engine {
+const (
+	ScopeName = "github.com/japb1998/control-tower/internal/api"
+)
+
+func InitRoutes() *gin.Engine {
 	routerLogger.Printf("Gin cold start")
 	r := gin.Default()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -53,10 +57,11 @@ func Serve() *gin.Engine {
 	corsConfig.AllowCredentials = true
 	corsConfig.AllowHeaders = []string{"*"}
 	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
+
+	r.Use(otelgin.Middleware(ScopeName))
+
 	r.Use(cors.New(corsConfig))
-	if os.Getenv("STAGE") != "local" {
-		r.Use(otelgin.Middleware("api"))
-	}
+
 	// SWAGGER
 	docs.SwaggerInfo.BasePath = ""
 	{

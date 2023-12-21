@@ -16,18 +16,19 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func initProvider() (func(), error) {
+func initProvider() (shutdown func(context.Context) error, err error) {
 	fmt.Println("initializing xray")
 	ctx := context.Background()
 	tp, err := xrayconfig.NewTracerProvider(ctx)
 	if err != nil {
 		return nil, err
 	}
-	shutdown := func() {
+	shutdown = func(ctx context.Context) error {
 		err := tp.Shutdown(ctx)
 		if err != nil {
-			fmt.Printf("error shutting down tracer provider: %v", err)
+			return err
 		}
+		return nil
 	}
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(xray.Propagator{})
@@ -36,7 +37,6 @@ func initProvider() (func(), error) {
 }
 
 func initApp() {
-	r := api.Serve()
 	ctx := context.Background()
 	tp, err := xrayconfig.NewTracerProvider(ctx)
 	if err != nil {
@@ -48,7 +48,7 @@ func initApp() {
 			fmt.Printf("error shutting down tracer provider: %v", err)
 		}
 	}(ctx)
-
+	r := api.InitRoutes()
 	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(xray.Propagator{})
 	lambda.Start(otellambda.InstrumentHandler(api.HandlerFunc(r), xrayconfig.WithRecommendedOptions(tp)...))
