@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
@@ -63,7 +64,11 @@ func GetSchedules(c *gin.Context) {
 
 	userEmail := c.MustGet("email").(string)
 
-	var ops PaginationOps
+	var ops = PaginationOps{
+		Limit: aws.Int(10),
+		Page:  0,
+	}
+
 	if err := c.ShouldBindWith(&ops, binding.Query); err != nil {
 		notificationLogger.Println(err)
 		var ve validator.ValidationErrors

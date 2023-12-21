@@ -10,12 +10,12 @@ import (
 
 type MsgSvc struct {
 	Client             *twilio.RestClient
-	MessagingServiceId string `validate:"required"` //sender phone number
+	MessagingServiceId string `validate:"required"` //twilio service id
 }
 
 // Msg. TemplateVariables is the json containing the variables to be replaces in the template
 type Msg struct {
-	TemplateId        string
+	TemplateId        string // whatsapp
 	TemplateVariables []byte // json
 	To                string `validate:"e164"`
 }
