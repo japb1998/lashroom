@@ -4,6 +4,9 @@ frameworkVersion: '3'
 
 useDotenv: true
 
+plugins:
+  - serverless-deployment-bucket
+
 provider:
   name: aws
   region: us-east-1
@@ -73,7 +76,7 @@ functions:
       TWILIO_SERVICE_ID: ${env:TWILIO_SERVICE_ID}
       TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
-      TWILIO_TEMPLATE_ID: ${env:TWILIO_TEMPLATE_ID}
+      TWILIO_TEMPLATE_ID: HX70acce7fe8a09e290969d180791c7016
       
 # you can add CloudFormation resource templates here
 resources:

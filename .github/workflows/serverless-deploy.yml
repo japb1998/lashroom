@@ -6,7 +6,7 @@ env:
   EMAIL_API_KEY: ${{secrets.EMAIL_API_KEY}}
   TWILIO_ACCOUNT_SID: ${{secrets.TWILIO_ACCOUNT_SID}}
   TWILIO_AUTH_TOKEN: ${{secrets.TWILIO_AUTH_TOKEN}}
-  MESSAGING_SERVICE_SID: ${{secrets.MESSAGING_SERVICE_SID}}
+  TWILIO_SERVICE_ID: ${{secrets.TWILIO_SERVICE_ID}}
 on:
   push:
     branches:
@@ -33,7 +33,7 @@ jobs:
       - name: serverless deploy
         uses: serverless/github-action@v3.2
         with:
-          args: -c "serverless plugin install --name serverless-lift && serverless deploy"
+          args: -c "serverless plugin install --name serverless-deployment-bucket && serverless deploy"
           entrypoint: /bin/sh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
