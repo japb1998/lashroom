@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,7 +12,14 @@ import (
 	"github.com/japb1998/control-tower/internal/model"
 )
 
-var clientLogger = log.New(os.Stdout, "[Client Service]", log.Default().Flags())
+// Errors
+
+var (
+	ErrInvalidDateString = errors.New("provided input string is not a valid date.")
+)
+var (
+	clientLogger = log.New(os.Stdout, "[Client Service]", log.Default().Flags())
+)
 
 type ClientRepository interface {
 	GetClientsByCreator(string) ([]model.ClientItem, error)
@@ -33,34 +41,37 @@ type FiltersResponseDto struct {
 	Total int64       `json:"total"`
 }
 type ClientDto struct {
-	Id           string `json:"id"`
-	CreatedBy    string `json:"createdBy"`
-	Phone        string `json:"phone"`
-	Email        string `json:"email"`
-	FirstName    string `json:"firstName"`
-	LastName     string `json:"lastName"`
-	CreatedAt    string `json:"createdAt"`
-	LastUpdateAt string `json:"lastUpdateAt"`
-	Description  string `json:"description"`
-	OptIn        *bool  `json:"optIn"`
+	Id           string  `json:"id"`
+	CreatedBy    string  `json:"createdBy"`
+	Phone        string  `json:"phone"`
+	Email        string  `json:"email"`
+	FirstName    string  `json:"firstName"`
+	LastName     string  `json:"lastName"`
+	LastSeen     *string `json:"lastSeen"`
+	CreatedAt    string  `json:"createdAt"`
+	LastUpdateAt string  `json:"lastUpdateAt"`
+	Description  string  `json:"description"`
+	OptIn        *bool   `json:"optIn"`
 }
 
 type CreateClient struct {
-	Phone        string `json:"phone" binding:"omitempty,e164"`
-	Email        string `json:"email" binding:"omitempty,email"`
-	FirstName    string `json:"firstName" binding:"required"`
-	LastName     string `json:"lastName" binding:"required"`
-	CreatedAt    string `json:"createdAt" binding:"omitempty,rfc3339"`
-	LastUpdateAt string `json:"lastUpdateAt" binding:"omitempty,rfc3339"`
-	Description  string `json:"description" binding:"min=2,max=255"`
+	Phone        string  `json:"phone" binding:"omitempty,e164"`
+	Email        string  `json:"email" binding:"omitempty,email"`
+	FirstName    string  `json:"firstName" binding:"required"`
+	LastName     string  `json:"lastName" binding:"required"`
+	CreatedAt    string  `json:"createdAt" binding:"omitempty,rfc3339"`
+	LastUpdateAt string  `json:"lastUpdateAt" binding:"omitempty,rfc3339"`
+	Description  string  `json:"description" binding:"min=2,max=255"`
+	LastSeen     *string `json:"lastSeen" binding:"required,rfc3339"`
 }
 type PatchClient struct {
-	Phone       string `json:"phone" form:"phone" binding:"omitempty,e164"`
-	Email       string `json:"email" form:"email" binding:"omitempty,email"`
-	FirstName   string `json:"firstName" form:"firstName" binding:"omitempty,min=1"`
-	LastName    string `json:"lastName" form:"lastName" binding:"omitempty,min=1"`
-	Description string `json:"description" form:"description" binding:"omitempty,min=2,max=255"`
-	OptIn       *bool  `json:"optIn" form:"optIn" binding:"omitempty,boolean"`
+	Phone       string  `json:"phone" form:"phone" binding:"omitempty,e164"`
+	Email       string  `json:"email" form:"email" binding:"omitempty,email"`
+	FirstName   string  `json:"firstName" form:"firstName" binding:"omitempty,min=1"`
+	LastName    string  `json:"lastName" form:"lastName" binding:"omitempty,min=1"`
+	Description string  `json:"description" form:"description" binding:"omitempty,min=2,max=255"`
+	LastSeen    *string `json:"lastSeen" form:"lastSeen" binding:"omitempty,rfc3339"`
+	OptIn       *bool   `json:"optIn" form:"optIn" binding:"omitempty,boolean"`
 }
 
 type ClientPaginationDto struct {
@@ -68,7 +79,7 @@ type ClientPaginationDto struct {
 	PaginationOps
 }
 
-func NewClient(createdBy, firstName, lastName, createdAt, lastUpdatedAt, description, phone, email, id string, opt bool) *ClientDto {
+func NewClient(createdBy, firstName, lastName, createdAt, lastUpdatedAt, description, phone, email, id, lastSeen string, opt bool) *ClientDto {
 	return &ClientDto{
 		Id:           id,
 		CreatedBy:    createdBy,
@@ -78,12 +89,17 @@ func NewClient(createdBy, firstName, lastName, createdAt, lastUpdatedAt, descrip
 		LastName:     lastName,
 		CreatedAt:    createdAt,
 		LastUpdateAt: lastUpdatedAt,
+		LastSeen:     &lastSeen,
 		Description:  description,
 		OptIn:        &opt,
 	}
 }
 
 func NewClientFromItem(ci model.ClientItem) *ClientDto {
+	var lastSeen *string
+	if ci.LastSeen != nil {
+		lastSeen = aws.String(ci.LastSeen.Format(time.RFC3339))
+	}
 	return &ClientDto{
 		Id:           ci.SortKey,
 		CreatedBy:    ci.PrimaryKey,
@@ -93,6 +109,7 @@ func NewClientFromItem(ci model.ClientItem) *ClientDto {
 		LastName:     ci.LastName,
 		CreatedAt:    ci.CreatedAt.Format(time.RFC3339),
 		LastUpdateAt: ci.LastUpdateAt.Format(time.RFC3339),
+		LastSeen:     lastSeen,
 		Description:  ci.Description,
 		OptIn:        &ci.OptIn,
 	}
@@ -128,11 +145,23 @@ func (c *ClientService) UpdateUser(createdBy string, clientId string, client Pat
 		Description: client.Description,
 		OptIn:       client.OptIn,
 	}
+
+	if client.LastSeen != nil {
+		lastSeen, err := time.Parse(time.RFC3339, *client.LastSeen)
+
+		if err != nil {
+			clientLogger.Println(err)
+			return ClientDto{}, fmt.Errorf("lastSeen could not me converted to date error='%s'", err)
+		}
+		patch.LastSeen = &lastSeen
+	}
+
 	clientLogger.Println("Updating User payload=", patch)
 
 	item, err := c.Store.UpdateUser(createdBy, clientId, patch)
 
 	if err != nil {
+		clientLogger.Println(err)
 		return ClientDto{}, err
 	}
 
@@ -140,8 +169,14 @@ func (c *ClientService) UpdateUser(createdBy string, clientId string, client Pat
 }
 
 func (c *ClientService) CreateClient(createdBy string, client CreateClient) (ClientDto, error) {
-	item := model.NewClientItem(createdBy, client.Phone, client.Email, client.FirstName, client.LastName, client.Description)
-	_, err := c.Store.CreateClient(*item)
+	lastSeen, err := time.Parse(time.RFC3339, *client.LastSeen)
+	if err != nil {
+		log.Printf("failed to convert lastSeen error:'%s'\n", err)
+		return ClientDto{}, ErrInvalidDateString
+	}
+	item := model.NewClientItem(createdBy, client.Phone, client.Email, client.FirstName, client.LastName, client.Description, &lastSeen)
+
+	_, err = c.Store.CreateClient(*item)
 
 	if err != nil {
 		return ClientDto{}, err
@@ -173,11 +208,24 @@ func (c *ClientService) GetClientById(createdBy, id string) (*ClientDto, error) 
 // GetClientWithFilters get clients with filters. Paginated, Zero indexed
 func (c *ClientService) GetClientWithFilters(createdBy string, dto ClientPaginationDto) (FiltersResponseDto, error) {
 
+	var lastSeen *time.Time
+	if dto.LastSeen != nil {
+		ls, err := time.Parse(time.RFC3339, *dto.LastSeen)
+
+		if err != nil {
+			clientLogger.Println(err)
+			return FiltersResponseDto{}, fmt.Errorf("failed to convert lastSeen Date error='%s'", ErrInvalidDateString)
+		}
+		clientLogger.Println("lastSeen at=%w", ls)
+		lastSeen = &ls
+	}
+
 	f := database.PatchClientItem{
 		Phone:     dto.Phone,
 		Email:     dto.Email,
 		FirstName: dto.FirstName,
 		LastName:  dto.LastName,
+		LastSeen:  lastSeen,
 	}
 
 	paginatioOps := database.PaginationOps{
