@@ -3,6 +3,7 @@ package api
 import (
 	"log"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -35,12 +36,21 @@ func InitRoutes() *gin.Engine {
 	r := gin.Default()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		v.RegisterValidation("rfc3339", func(fl validator.FieldLevel) bool {
-			routerLogger.Println("registering validation rfc3339")
-			if fl.Field().String() == "" {
-				return true
+
+			var field string
+			if reflect.PointerTo(fl.Field().Type()).Kind() == reflect.String {
+				if !fl.Field().Addr().IsNil() {
+					return true
+				}
+				field = fl.Field().Addr().String()
+			} else {
+				if fl.Field().String() == "" {
+					return true
+				}
+				field = fl.Field().String()
 			}
 
-			_, err := time.Parse(time.RFC3339, fl.Field().String())
+			_, err := time.Parse(time.RFC3339, field)
 
 			if err != nil {
 				return false

@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/japb1998/control-tower/internal/api"
+	"github.com/joho/godotenv"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -70,6 +71,16 @@ func initApp() {
 
 	if err := r.Run(); err != nil {
 		log.Fatal(err)
+	}
+
+}
+
+func init() {
+
+	fmt.Println("init local local.go")
+	err := godotenv.Load(".env", "./control-tower/.env")
+	if err != nil {
+		log.Fatalf("Error loading env vars: %s", err)
 	}
 
 }

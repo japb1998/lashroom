@@ -18,9 +18,9 @@ gomodgen:
 	./gomod.sh
 
 serve: 
-	source "C:\Users\Javier Perez\OneDrive\Desktop\eliEmail\environment.sh"
 	STAGE=local
-	go run ./scheduleEmail/cmd
+	PORT=3000
+	go run -tags=local ./control-tower/cmd/app/
 upload:
 	source "C:\Users\Javier Perez\OneDrive\Desktop\eliEmail\environment.sh"
 	go run ./cliApp/cmd --creator pratoelis@gmail.com --path "C:\Users\Javier Perez\OneDrive\Desktop\booksy_automation\customers.json"

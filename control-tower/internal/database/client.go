@@ -27,16 +27,17 @@ type ClientRepository struct {
 }
 
 type PatchClientItem struct {
-	Phone       string `json:"phone"`
-	Email       string `json:"email"`
-	FirstName   string `json:"firstName"`
-	LastName    string `json:"lastName"`
-	Description string `json:"description"`
-	OptIn       *bool  `json:"optIn"`
+	Phone       string     `json:"phone"`
+	Email       string     `json:"email"`
+	FirstName   string     `json:"firstName"`
+	LastName    string     `json:"lastName"`
+	LastSeen    *time.Time `json:"lastSeen"`
+	Description string     `json:"description"`
+	OptIn       *bool      `json:"optIn"`
 }
 
 func NewClientRepo(sess *session.Session) *ClientRepository {
-	clientLogger.Println(os.Getenv("CLIENT_TABLE"))
+	clientLogger.Println("client Table ", os.Getenv("CLIENT_TABLE"))
 	if clientRepository == nil {
 		client := newDynamoClient(sess)
 		clientRepository = &ClientRepository{
@@ -59,9 +60,10 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]model.Client
 
 		return nil, fmt.Errorf("invalid creator: %s", createdBy)
 	}
+
 	clientEntityList := make([]model.ClientItem, 0)
 	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
-	clientLogger.Printf("table name: %s", c.tableName)
+
 	queryInput := &dynamodb.QueryInput{
 		TableName:                 &c.tableName,
 		KeyConditionExpression:    aws.String("#primaryKey = :primaryKey"),
@@ -140,6 +142,12 @@ func (c *ClientRepository) ClientCountWithFilters(createdBy string, clientPatch 
 		filterExpressionList = append(filterExpressionList, "contains(#lastName, :lastName)")
 	}
 
+	if clientPatch.LastSeen != nil {
+		attributeValues[":lastSeen"] = clientPatch.LastSeen
+		expressionAttributeNames["#lastSeen"] = aws.String("lastSeen")
+		filterExpressionList = append(filterExpressionList, "#lastSeen = :lastSeen")
+	}
+
 	marshaledValues, err := dynamodbattribute.MarshalMap(attributeValues)
 
 	if err != nil {
@@ -211,6 +219,12 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 		filterExpressionList = append(filterExpressionList, "contains(#lastName, :lastName)")
 	}
 
+	if clientPatch.LastSeen != nil {
+		clientLogger.Println("Last Seen='%w'", clientPatch.LastSeen)
+		attributeValues[":lastSeen"] = clientPatch.LastSeen
+		expressionAttributeNames["#lastSeen"] = aws.String("lastSeen")
+		filterExpressionList = append(filterExpressionList, "#lastSeen = :lastSeen")
+	}
 	// values
 	marshaledValues, err := dynamodbattribute.MarshalMap(attributeValues)
 
@@ -339,6 +353,12 @@ func (c *ClientRepository) UpdateUser(createdBy string, clientId string, client 
 		updateExpressionValues[":optIn"] = *client.OptIn
 		updateExpressionNames["#optIn"] = aws.String("optIn")
 		expressionList = append(expressionList, "#optIn = :optIn")
+	}
+
+	if client.LastSeen != nil {
+		updateExpressionValues[":lastSeen"] = client.LastSeen
+		updateExpressionNames["#lastSeen"] = aws.String("lastSeen")
+		expressionList = append(expressionList, "#lastSeen = :lastSeen")
 	}
 
 	if len(expressionList) == 0 {
