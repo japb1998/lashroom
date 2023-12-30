@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/go-playground/validator/v10"
+	"github.com/japb1998/control-tower/internal/apigateway"
 	"github.com/japb1998/control-tower/internal/database"
 	"github.com/japb1998/control-tower/internal/scheduler"
 	"github.com/japb1998/control-tower/internal/service"
+	"github.com/japb1998/control-tower/pkg/awssess"
 	"github.com/japb1998/control-tower/pkg/credentials"
 	"github.com/japb1998/control-tower/pkg/email"
 	"github.com/japb1998/control-tower/pkg/sms"
@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-lambda-go/otellambda/xrayconfig"
 	"go.opentelemetry.io/contrib/propagators/aws/xray"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -31,6 +32,7 @@ import (
 var notificationSvc *service.NotificationService
 var emailSvc *email.EmailService
 var clientSvc *service.ClientService
+var connectionSvc *service.ConnectionSvc
 
 var msgSvc *sms.MsgSvc
 var apiUrl = os.Getenv("API_URL")
@@ -177,31 +179,39 @@ func Handler(ctx context.Context, event service.Notification) error {
 
 	wg.Wait()
 
+	// notify active connections - FE.
+	wsCtx, wsSpan := tracer.Start(c, "ws-span")
+	msg := &service.NotificationUpdate{
+		Email:          client.CreatedBy,
+		NotificationId: event.ID,
+	}
+	err = connectionSvc.SendUpdateByEmail(wsCtx, msg)
+
+	if err != nil {
+		wsSpan.SetAttributes(attribute.KeyValue{
+			Key:   attribute.Key("ws-delivery"),
+			Value: attribute.BoolValue(false),
+		})
+		handlerLogger.Println(err)
+		wsSpan.End()
+		return err
+	}
+	wsSpan.End()
+
 	return nil
 }
 
 func init() {
-	var sess *session.Session
-
+	// if local load from .env file
 	switch os.Getenv("STAGE") {
 	case "local":
 		err := godotenv.Load(".env")
 		if err != nil {
 			log.Fatalf("Error loading env vars: %s", err)
 		}
-
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-			Profile:           "personal",
-			Config: aws.Config{
-				Region: aws.String("us-east-1"),
-			},
-		}))
-	default:
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-		}))
 	}
+
+	sess := awssess.MustGetSession()
 
 	var ops email.EmailSvcOpts
 	secretArn := os.Getenv("MAIL_GUN_SECRET_ID")
@@ -232,4 +242,9 @@ func init() {
 	// client
 	clientStore := database.NewClientRepo(sess)
 	clientSvc = service.NewClientSvc(clientStore)
+
+	// connection
+	connRepo := database.NewConnectionRepo(sess)
+	apigw := apigateway.NewApiGatewayClient(sess, os.Getenv("WS_HTTPS_URL"))
+	connectionSvc = service.NewConnectionSvc(connRepo, apigw)
 }

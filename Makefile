@@ -6,6 +6,12 @@ build:
 	zip -j ./bin/control-tower/control-tower.zip ./bin/control-tower/bootstrap
 	env GOARCH=arm64 GOOS=linux go build -tags lambda.norpc -o ./bin/schedule-handler/bootstrap ./control-tower/cmd/schedule-handler
 	zip -j ./bin/schedule-handler/schedule-handler.zip ./bin/schedule-handler/bootstrap
+	env GOARCH=arm64 GOOS=linux go build -tags lambda.norpc -o ./bin/ws-connection-handler/bootstrap ./control-tower/cmd/ws-connection-handler
+	zip -j ./bin/ws-connection-handler/ws-connection-handler.zip ./bin/ws-connection-handler/bootstrap
+	env GOARCH=arm64 GOOS=linux go build -tags lambda.norpc -o ./bin/ws-default-handler/bootstrap ./control-tower/cmd/ws-default-handler
+	zip -j ./bin/ws-default-handler/ws-default-handler.zip ./bin/ws-default-handler/bootstrap
+	env GOARCH=arm64 GOOS=linux go build -tags lambda.norpc -o ./bin/authorizer/bootstrap ./control-tower/cmd/authorizer
+	zip -j ./bin/authorizer/authorizer.zip ./bin/authorizer/bootstrap
 clean:
 	rm -rf ./bin ./vendor go.sum
 
