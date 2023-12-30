@@ -28,6 +28,7 @@ package:
     individually: true
 
 functions:
+# api main handler - gin server
   Api:
     name: control-tower-api-${opt:stage, 'dev'}
     role: DefaultRole
@@ -57,6 +58,7 @@ functions:
       NOTIFICATION_LAMBDA: !GetAtt SchedulerTargetLambdaFunction.Arn
       GIN_MODE: release
     timeout: 30
+  # lambda handler that send notifications triggered by eventBridge scheduler
   SchedulerTarget:
     name: notification-handler-${opt:stage, 'dev'}
     role: DefaultRole
@@ -77,10 +79,60 @@ functions:
       TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
       TWILIO_TEMPLATE_ID: HX70acce7fe8a09e290969d180791c7016
-      
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+  # websocket api
+  ws-connection:
+    timeout: 30
+    memorySize: 128
+    role: DefaultRole
+    handler: bootstrap
+    package:
+      artifact: bin/ws-connection-handler/ws-connection-handler.zip
+    events:
+      - websocket:
+          route: $connect
+          authorizer:
+            name: authorizerFunc
+            identitySource:
+              - route.request.querystring.Auth
+      - websocket:
+          route: $disconnect
+    environment:
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+  # lambda ws default route handler
+  ws-default:
+    timeout: 30
+    memorySize: 128
+    role: DefaultRole
+    handler: bootstrap
+    package:
+      artifact: bin/ws-default-handler/ws-default-handler.zip
+    events:
+      - websocket:
+          route: $default
+    environment:
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+  # lambda authorizer for the websocket api
+  authorizerFunc:
+    timeout: 10
+    memorySize: 128
+    role: DefaultRole
+    handler: bootstrap
+    package:
+      artifact: bin/authorizer/authorizer.zip
+    environment:
+      # AWS_REGION: ${AWS::Region} # by default this environment variable is provided in lambda
+      USER_POOL: ${env:USER_POOL_ID}
+      AWS_ACCOUNT_ID: !Sub ${AWS::AccountId}
+      API_ID: !Ref WebsocketsApi
+      STAGE: ${opt:stage, 'dev'}
 # you can add CloudFormation resource templates here
 resources:
   Resources:
+  # Table to store notifications to be send, when and status.
     NotificationsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -110,6 +162,7 @@ resources:
                 KeyType: RANGE
             Projection: 
               ProjectionType: ALL
+    # Table for the App Clients 
     ClientTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -125,9 +178,23 @@ resources:
             KeyType: HASH
           - AttributeName: sortKey
             KeyType: RANGE
-                
-          
-      
+    # Table to keep status from the Websocker connections.
+    ConnectionsDataTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+          TableName: ${self:service}-connections-database-${opt:stage, 'dev'}
+          BillingMode: PAY_PER_REQUEST
+          AttributeDefinitions:
+            - AttributeName: email
+              AttributeType: 'S'
+            - AttributeName: connectionId
+              AttributeType: 'S'
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+            - AttributeName: connectionId
+              KeyType: RANGE   
+    # Role for all Lambda functions
     DefaultRole:
       Type: AWS::IAM::Role
       Properties:
@@ -153,6 +220,8 @@ resources:
                     - !Join ["",[!GetAtt NotificationsTable.Arn, "/index/*"]]
                     - !GetAtt ClientTable.Arn 
                     - !Join ["",[!GetAtt ClientTable.Arn, "/index/*"]]
+                    - !GetAtt ConnectionsDataTable.Arn 
+                    - !Join ["",[!GetAtt ConnectionsDataTable.Arn, "/index/*"]]
           - PolicyName: ${env:APP_ID}-cloudwatch-default-${opt:stage, 'dev'}
             PolicyDocument:
               Version: '2012-10-17'
@@ -197,7 +266,17 @@ resources:
                     - "secretsmanager:GetSecretValue"
                   Resource:
                     - !Sub "arn:aws:secretsmanager:${AWS::Region}:220162411939:secret:${opt:stage, 'dev'}/control-tower/mailgun-*"
-
+          # policy to send messages to apigateway websocket connections.
+          - PolicyName: ${env:APP_ID}-ws-access-${opt:stage, 'dev'}
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - execute-api:Invoke
+                    - execute-api:ManageConnections
+                  Resource:
+                    - 'arn:aws:execute-api:*:*'
 
     SchedulerRole:
       Type: AWS::IAM::Role
