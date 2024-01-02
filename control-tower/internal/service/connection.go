@@ -124,3 +124,22 @@ func (c *ConnectionSvc) Disconnect(ctx context.Context, conn *Connection) (err e
 
 	return err
 }
+
+func (c *ConnectionSvc) Ping(ctx context.Context, conn *Connection) error {
+
+	d, err := json.Marshal(map[string]bool{
+		"healthy": true,
+	})
+
+	if err != nil {
+		connectionLogger.Println(err)
+		return err
+	}
+	if _, err := c.broadCastClient.PostToConnection(&apigatewaymanagementapi.PostToConnectionInput{
+		ConnectionId: &conn.ConnectionId,
+		Data:         d,
+	}); err != nil {
+		connectionLogger.Printf("failed to send message to connectionID='%s' client='%s'", conn.ConnectionId, conn.Email)
+	}
+	return nil
+}

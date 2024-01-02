@@ -19,6 +19,7 @@ type ConnectionSvc interface {
 	SendUpdateByEmail(ctx context.Context, msg *service.NotificationUpdate) error
 	Connect(ctx context.Context, conn *service.Connection) error
 	Disconnect(ctx context.Context, conn *service.Connection) (err error)
+	Ping(ctx context.Context, conn *service.Connection) error
 }
 
 // WebSocketController
@@ -123,6 +124,32 @@ func (c *WebSocketController) HandleDefault(ctx context.Context, event events.AP
 		return events.APIGatewayProxyResponse{}, err
 	}
 
+	return events.APIGatewayProxyResponse{
+		StatusCode:      200,
+		Headers:         nil,
+		IsBase64Encoded: false,
+	}, nil
+}
+
+// HandlePing
+
+func (c *WebSocketController) HandlePing(ctx context.Context, event events.APIGatewayWebsocketProxyRequest) (events.APIGatewayProxyResponse, error) {
+	msgUrl := fmt.Sprintf("https://%s/%s", event.RequestContext.DomainName, event.RequestContext.Stage)
+	cId := event.RequestContext.ConnectionID
+
+	wsLogger.Printf("url=%s, cId=%s\n", msgUrl, cId)
+
+	wsLogger.Printf("received message='%s'\n", event.Body)
+
+	conn := &service.Connection{
+		ConnectionId: cId,
+	}
+	err := c.svc.Ping(ctx, conn)
+
+	if err != nil {
+		wsLogger.Println(err)
+		return events.APIGatewayProxyResponse{}, fmt.Errorf("failed to ping WS server!")
+	}
 	return events.APIGatewayProxyResponse{
 		StatusCode:      200,
 		Headers:         nil,
