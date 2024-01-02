@@ -127,8 +127,8 @@ func (c *ConnectionSvc) Disconnect(ctx context.Context, conn *Connection) (err e
 
 func (c *ConnectionSvc) Ping(ctx context.Context, conn *Connection) error {
 
-	d, err := json.Marshal(map[string]bool{
-		"healthy": true,
+	d, err := json.Marshal(map[string]string{
+		"action": "health-response",
 	})
 
 	if err != nil {
