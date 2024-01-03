@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -239,7 +240,7 @@ func PostSchedule(c *gin.Context) {
 
 	_, scheduleSpan := tracer.Start(ctx, "create-schedule")
 
-	err = notificationService.ScheduleNotification(userEmail, &schedule)
+	id, err := notificationService.ScheduleNotification(userEmail, &schedule)
 
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidDate) {
@@ -255,7 +256,28 @@ func PostSchedule(c *gin.Context) {
 		return
 	}
 	scheduleSpan.End()
+
+	var wg sync.WaitGroup
+	go func() {
+		wg.Add(1)
+		/*
+			TODO: move ws notification to eventBridge event handler.
+		*/
+		msg, err := service.NewNotificationUpdateMsg(userEmail, id).WithAction(service.NotificationCreatedAction)
+
+		if err != nil {
+			notificationLogger.Printf("failed to notify using ws error:'%s'", err)
+			return
+		}
+		err = connectionSvc.SendWsMessageByEmail(c.Request.Context(), msg)
+
+		if err != nil {
+			notificationLogger.Printf("failed to notify using ws error:'%s'", err)
+			return
+		}
+	}()
 	c.Writer.WriteHeader(204)
+	wg.Wait()
 }
 
 // UpdateSchedule updates schedule.

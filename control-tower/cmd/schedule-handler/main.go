@@ -143,6 +143,7 @@ func Handler(ctx context.Context, event service.Notification) error {
 					errChan <- err
 
 				} else {
+					handlerLogger.Printf("SMS was successfully sent to='%s'!\n", client.Phone)
 					errChan <- nil
 				}
 
@@ -177,16 +178,27 @@ func Handler(ctx context.Context, event service.Notification) error {
 	statusSpan.End()
 	close(errChan)
 
+	// we are done waiting for the go rutine to finish
 	wg.Wait()
 
 	// notify active connections - FE.
 	wsCtx, wsSpan := tracer.Start(c, "ws-span")
-	msg := &service.NotificationUpdate{
-		Email:          client.CreatedBy,
-		NotificationId: event.ID,
-	}
-	err = connectionSvc.SendUpdateByEmail(wsCtx, msg)
+	msg, err := service.NewNotificationUpdateMsg(client.CreatedBy, event.ID).WithAction(service.NotificationUpdatedAction)
 
+	// we do not return an error because an error here does not mean that the delivery failed
+	if err != nil {
+		handlerLogger.Println(err)
+		wsSpan.SetAttributes(attribute.KeyValue{
+			Key:   attribute.Key("ws-delivery"),
+			Value: attribute.BoolValue(false),
+		})
+		handlerLogger.Println(err)
+		wsSpan.End()
+	}
+	handlerLogger.Printf("WS message='%v'", msg)
+
+	err = connectionSvc.SendWsMessageByEmail(wsCtx, msg)
+	// we do not return an error because an error here does not mean that the delivery failed
 	if err != nil {
 		wsSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key("ws-delivery"),
@@ -194,7 +206,6 @@ func Handler(ctx context.Context, event service.Notification) error {
 		})
 		handlerLogger.Println(err)
 		wsSpan.End()
-		return err
 	}
 	wsSpan.End()
 

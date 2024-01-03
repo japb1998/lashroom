@@ -56,6 +56,8 @@ functions:
       CLIENT_TABLE: !Ref ClientTable
       SCHEDULER_ROLE:  !GetAtt SchedulerRole.Arn
       NOTIFICATION_LAMBDA: !GetAtt SchedulerTargetLambdaFunction.Arn
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
       GIN_MODE: release
     timeout: 30
   # lambda handler that send notifications triggered by eventBridge scheduler

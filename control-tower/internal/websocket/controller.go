@@ -16,7 +16,7 @@ var (
 
 // ConnectionSvc
 type ConnectionSvc interface {
-	SendUpdateByEmail(ctx context.Context, msg *service.NotificationUpdate) error
+	SendWsMessageByEmail(ctx context.Context, msg *service.NotificationUpdate) error
 	Connect(ctx context.Context, conn *service.Connection) error
 	Disconnect(ctx context.Context, conn *service.Connection) (err error)
 	Ping(ctx context.Context, conn *service.Connection) error
@@ -120,7 +120,7 @@ func (c *WebSocketController) HandleDefault(ctx context.Context, event events.AP
 		NotificationId: "sample_id",
 	}
 
-	if err := c.svc.SendUpdateByEmail(ctx, msg); err != nil {
+	if err := c.svc.SendWsMessageByEmail(ctx, msg); err != nil {
 		return events.APIGatewayProxyResponse{}, err
 	}
 
