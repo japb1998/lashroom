@@ -34,7 +34,7 @@ functions:
     role: DefaultRole
     handler: bootstrap
     package:
-      artifact: bin/control-tower/control-tower.zip
+      artifact: bin/app/app.zip
     memorySize: 256
     events:
       - http:
@@ -56,6 +56,8 @@ functions:
       CLIENT_TABLE: !Ref ClientTable
       SCHEDULER_ROLE:  !GetAtt SchedulerRole.Arn
       NOTIFICATION_LAMBDA: !GetAtt SchedulerTargetLambdaFunction.Arn
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
       GIN_MODE: release
     timeout: 30
   # lambda handler that send notifications triggered by eventBridge scheduler
@@ -110,8 +112,21 @@ functions:
     package:
       artifact: bin/ws-default-handler/ws-default-handler.zip
     events:
+      - websocket: $default
+    environment:
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+  # lambda ws ping handler - used to keep the connection alive for longer than 10 minutes
+  ws-ping:
+    timeout: 30
+    memorySize: 128
+    role: DefaultRole
+    handler: bootstrap
+    package:
+      artifact: bin/ws-ping-handler/ws-ping-handler.zip
+    events:
       - websocket:
-          route: $default
+          route: health # will trigger if $request.body.action === "ping"
     environment:
       CONNECTION_TABLE: !Ref ConnectionsDataTable
       WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]

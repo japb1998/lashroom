@@ -19,6 +19,15 @@ const (
 	updateNotification = "updateNotification"
 )
 
+// ws-actions
+const (
+	NotificationUpdatedAction = "updateNotification"  // properties of an specific notification changed.
+	NotificationCreatedAction = "newNotification"     // new notification was created.
+	NotificationDeletedAction = "notificationDeleted" // a notification was deleted.
+	PingResponseAction        = "health-response"
+	PingAction                = "health" // ping action to keep the connection alive for longer than 10mins.
+)
+
 var connectionLogger = log.New(os.Stdin, "[Connection Service] ", log.Default().Flags())
 
 type ConnectionSvc struct {
@@ -36,7 +45,14 @@ type BroadcastClient interface {
 	PostToConnection(*apigatewaymanagementapi.PostToConnectionInput) (*apigatewaymanagementapi.PostToConnectionOutput, error)
 }
 
+// webSocketMsg
 type webSocketMsg struct {
+	/**
+	Valid Actions
+	notificationUpdated = "updateNotifications" // properties of an specific notification changed.
+	notificationCreated = "newNotification" // new notification was created.
+	notificationDeleted = "notificationDeleted" // a notification was deleted.
+	*/
 	Action string `json:"action"`
 }
 
@@ -44,6 +60,28 @@ type NotificationUpdate struct {
 	webSocketMsg
 	Email          string `json:"email"`
 	NotificationId string `json:"notificationId"`
+}
+
+func NewNotificationUpdateMsg(email, notificationId string) *NotificationUpdate {
+	return &NotificationUpdate{
+		Email:          email,
+		NotificationId: notificationId,
+	}
+}
+
+// WithAction - receives an action string and returns the *NotificationUpdate pointer or error if the action is invalid.
+func (n *NotificationUpdate) WithAction(action string) (*NotificationUpdate, error) {
+	switch action {
+	case NotificationUpdatedAction:
+		fallthrough
+	case NotificationCreatedAction:
+		fallthrough
+	case NotificationDeletedAction:
+		n.Action = action
+		return n, nil
+	}
+
+	return nil, fmt.Errorf("invalid action for notification update action='%s'", action)
 }
 
 type Connection struct {
@@ -58,10 +96,12 @@ func NewConnectionSvc(store ConnectionRepo, bClient BroadcastClient) *Connection
 	}
 }
 
-// SendUpdateByEmail sends a notification update message to all active connections for a user email.
-func (c *ConnectionSvc) SendUpdateByEmail(ctx context.Context, msg *NotificationUpdate) error {
-	// set the action for routing purposes
-	msg.Action = updateNotification
+// SendWsMessageByEmail sends a notification update message to all active connections for a user email.
+func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *NotificationUpdate) error {
+
+	if msg.Action == "" {
+		return fmt.Errorf("message action can't be empty")
+	}
 
 	var wg sync.WaitGroup
 	conns, err := c.store.GetConnectionIds(ctx, msg.Email)
@@ -123,4 +163,24 @@ func (c *ConnectionSvc) Disconnect(ctx context.Context, conn *Connection) (err e
 	err = c.store.DeleteConnection(ctx, connection)
 
 	return err
+}
+
+// Ping - response to health action
+func (c *ConnectionSvc) Ping(ctx context.Context, conn *Connection) error {
+
+	d, err := json.Marshal(webSocketMsg{
+		Action: PingResponseAction,
+	})
+
+	if err != nil {
+		connectionLogger.Println(err)
+		return err
+	}
+	if _, err := c.broadCastClient.PostToConnection(&apigatewaymanagementapi.PostToConnectionInput{
+		ConnectionId: &conn.ConnectionId,
+		Data:         d,
+	}); err != nil {
+		connectionLogger.Printf("failed to send message to connectionID='%s' client='%s'", conn.ConnectionId, conn.Email)
+	}
+	return nil
 }

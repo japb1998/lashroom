@@ -162,14 +162,16 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 }
 
 // ScheduleNotification schedules a new execution and stores the schedule ID in the db
-func (s *NotificationService) ScheduleNotification(createdBy string, notification *NotificationInput) error {
+func (s *NotificationService) ScheduleNotification(createdBy string, notification *NotificationInput) (id string, err error) {
 	// we parse the incoming date in UTC
 	date, err := time.Parse(time.RFC3339, notification.Date)
 	if err != nil {
-		return fmt.Errorf("invalid notification date error: %w", err)
+		return "", fmt.Errorf("invalid notification date error: %w", err)
 	}
 	// item uuid is generated here.
 	i := model.NewNotificationItem(createdBy, NotSentStatus.String(), notification.ClientId, date, notification.DeliveryMethods)
+	// set id to be returned here.
+	id = i.SortKey
 
 	newNotification := NewNotification(createdBy, i.SortKey, i.ClientToken, notification)
 
@@ -177,7 +179,7 @@ func (s *NotificationService) ScheduleNotification(createdBy string, notificatio
 
 	if err != nil {
 		notificationLogger.Printf("error while marshalling notification payload: %s", err)
-		return fmt.Errorf("error while scheduling notification")
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 
 	// create event bridge event
@@ -189,9 +191,9 @@ func (s *NotificationService) ScheduleNotification(createdBy string, notificatio
 	if err != nil {
 		notificationLogger.Printf("error while creating schedule: %s", err)
 		if errors.Is(err, scheduler.ErrInvalidDate) {
-			return ErrInvalidDate
+			return "", ErrInvalidDate
 		}
-		return fmt.Errorf("error while scheduling notification")
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 	// store in dynamo .
 	err = s.store.Create(*i)
@@ -202,11 +204,12 @@ func (s *NotificationService) ScheduleNotification(createdBy string, notificatio
 		err = s.scheduler.DeleteSchedule(newNotification.ID, i.ClientToken)
 		notificationLogger.Println("failed to cleanup notification err: ", err)
 
-		return fmt.Errorf("error while scheduling notification")
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 
 	notificationLogger.Printf("notification created ID: '%s'", newNotification.ID)
-	return nil
+
+	return id, nil
 }
 
 // UpdateNotification function allows you to update all notification fields except status for status use SetNotificationStatus.

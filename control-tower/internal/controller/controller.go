@@ -5,40 +5,32 @@ import (
 	"log"
 	"os"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/japb1998/control-tower/internal/apigateway"
 	"github.com/japb1998/control-tower/internal/database"
 	"github.com/japb1998/control-tower/internal/scheduler"
 	"github.com/japb1998/control-tower/internal/service"
+	"github.com/japb1998/control-tower/pkg/awssess"
 	"github.com/joho/godotenv"
 	"go.opentelemetry.io/otel"
 )
 
-func init() {
-	// aws session
-	var sess *session.Session
+var connectionSvc *service.ConnectionSvc
 
-	switch os.Getenv("STAGE") {
-	case "local":
+func init() {
+
+	if os.Getenv("STAGE") == "local" {
+
 		fmt.Println("init local")
 		err := godotenv.Load(".env", "./control-tower/.env")
 		if err != nil {
 			log.Fatalf("Error loading env vars: %s", err)
 		}
-		fmt.Println("local", os.Getenv("EMAIL_TABLE"))
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-			Profile:           "personal",
-			Config: aws.Config{
-				Region: aws.String("us-east-1"),
-			},
-		}))
-	default:
-		sess = session.Must(session.NewSessionWithOptions(session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-		}))
 	}
 
+	// aws session
+	sess := awssess.MustGetSession()
+
+	// scheduler service
 	scheduler := scheduler.NewScheduler(sess)
 	notificationStore := database.NewNotificationRepository(sess)
 	notificationService = service.NewNotificationService(notificationStore, scheduler)
@@ -47,6 +39,10 @@ func init() {
 	clientService = service.NewClientSvc(clientStore)
 	notificationLogger.Println("Controllers Initialized")
 
+	// ws service
+	apigw := apigateway.NewApiGatewayClient(sess, os.Getenv("WS_HTTPS_URL"))
+	connStore := database.NewConnectionRepo(sess)
+	connectionSvc = service.NewConnectionSvc(connStore, apigw)
 	// initialize tracer
 	tracer = otel.Tracer("github.com/japb1998/control-tower/internal/controller")
 }
