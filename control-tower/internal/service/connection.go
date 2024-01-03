@@ -136,10 +136,6 @@ func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *Notificat
 	return nil
 }
 
-func (c *ConnectionSvc) NewNotification(ctx context.Context) {
-
-}
-
 // Connect
 func (c *ConnectionSvc) Connect(ctx context.Context, conn *Connection) error {
 	connection := model.Connection{
