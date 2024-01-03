@@ -16,16 +16,10 @@ var (
 
 // ConnectionSvc
 type ConnectionSvc interface {
-<<<<<<< HEAD
 	SendWsMessageByEmail(ctx context.Context, msg *service.NotificationUpdate) error
 	Connect(ctx context.Context, conn *service.Connection) error
 	Disconnect(ctx context.Context, conn *service.Connection) (err error)
 	Ping(ctx context.Context, conn *service.Connection) error
-=======
-	SendUpdateByEmail(ctx context.Context, msg *service.NotificationUpdate) error
-	Connect(ctx context.Context, conn *service.Connection) error
-	Disconnect(ctx context.Context, conn *service.Connection) (err error)
->>>>>>> 26243677407c395f08142107ea999924911ed550
 }
 
 // WebSocketController
