@@ -18,7 +18,6 @@ var (
 type ConnectionSvc interface {
 	SendWsMessageByEmail(ctx context.Context, msg *service.NotificationUpdate) error
 	Ping(ctx context.Context, conn *service.Connection) error
-	SendUpdateByEmail(ctx context.Context, msg *service.NotificationUpdate) error
 	Connect(ctx context.Context, conn *service.Connection) error
 	Disconnect(ctx context.Context, conn *service.Connection) (err error)
 }
