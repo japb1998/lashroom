@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -258,23 +259,15 @@ func PostSchedule(c *gin.Context) {
 	scheduleSpan.End()
 
 	var wg sync.WaitGroup
+	/*
+		TODO: move ws notification to eventBridge event handler.
+	*/
 	go func() {
 		wg.Add(1)
-		/*
-			TODO: move ws notification to eventBridge event handler.
-		*/
-		msg, err := service.NewNotificationUpdateMsg(userEmail, id).WithAction(service.NotificationCreatedAction)
-
-		if err != nil {
-			notificationLogger.Printf("failed to notify using ws error:'%s'", err)
-			return
+		if err := sendUserNotification(c.Request.Context(), user.Email, id, service.NotificationCreatedAction); err != nil {
+			notificationLogger.Println(err)
 		}
-		err = connectionSvc.SendWsMessageByEmail(c.Request.Context(), msg)
 
-		if err != nil {
-			notificationLogger.Printf("failed to notify using ws error:'%s'", err)
-			return
-		}
 	}()
 	c.Writer.WriteHeader(204)
 	wg.Wait()
@@ -409,4 +402,20 @@ func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
 	}
 
 	return notificationList, nil
+}
+
+func sendUserNotification(ctx context.Context, email, notificationId, action string) error {
+	msg, err := service.NewNotificationUpdateMsg(email, notificationId).WithAction(action)
+
+	if err != nil {
+		notificationLogger.Printf("failed to notify using ws error:'%s'", err)
+		return err
+	}
+	err = connectionSvc.SendWsMessageByEmail(ctx, msg)
+
+	if err != nil {
+		notificationLogger.Printf("failed to notify using ws error:'%s'", err)
+		return err
+	}
+	return nil
 }

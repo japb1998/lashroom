@@ -61,7 +61,7 @@ type CreateClient struct {
 	LastName     string  `json:"lastName" binding:"required"`
 	CreatedAt    string  `json:"createdAt" binding:"omitempty,rfc3339"`
 	LastUpdateAt string  `json:"lastUpdateAt" binding:"omitempty,rfc3339"`
-	Description  string  `json:"description" binding:"min=2,max=255"`
+	Description  string  `json:"description" binding:"omitempty,min=2,max=255"`
 	LastSeen     *string `json:"lastSeen" binding:"required,rfc3339"`
 }
 type PatchClient struct {
