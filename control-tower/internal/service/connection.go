@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
+	"log/slog"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/service/apigatewaymanagementapi"
@@ -27,8 +26,6 @@ const (
 	PingResponseAction        = "health-response"
 	PingAction                = "health" // ping action to keep the connection alive for longer than 10mins.
 )
-
-var connectionLogger = log.New(os.Stdin, "[Connection Service] ", log.Default().Flags())
 
 type ConnectionSvc struct {
 	store           ConnectionRepo
@@ -107,14 +104,14 @@ func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *Notificat
 	conns, err := c.store.GetConnectionIds(ctx, msg.Email)
 
 	if err != nil {
-		connectionLogger.Println(err)
+		connectionLogger.Error(err.Error())
 		return fmt.Errorf("error getting all active connections for email='%s'", msg.Email)
 	}
 
 	d, err := json.Marshal(msg)
 
 	if err != nil {
-		connectionLogger.Println(err)
+		connectionLogger.Error(err.Error())
 		return fmt.Errorf("invalid notification message")
 	}
 	for _, conn := range conns {
@@ -127,7 +124,7 @@ func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *Notificat
 				ConnectionId: &conn.ConnectionId,
 				Data:         d,
 			}); err != nil {
-				connectionLogger.Printf("failed to send message to connectionID='%s' client='%s'", conn.ConnectionId, conn.Email)
+				connectionLogger.Error("failed to send message,", slog.String("connectionID", conn.ConnectionId), slog.String("email", conn.Email))
 			}
 
 		}(conn)
@@ -145,11 +142,11 @@ func (c *ConnectionSvc) Connect(ctx context.Context, conn *Connection) error {
 	err := c.store.SaveConnection(ctx, connection)
 
 	if err != nil {
-		connectionLogger.Println(err)
+		connectionLogger.Error(err.Error())
 		return fmt.Errorf("failed to connect connectionId='%s', client='%s'", conn.ConnectionId, conn.Email)
 	}
 
-	connectionLogger.Printf("Successfully connected!. connectionId='%s', client='%s'", conn.ConnectionId, conn.Email)
+	connectionLogger.Error("Successfully connected!.", slog.String("connectionId", conn.ConnectionId), slog.String("client", conn.Email))
 	return nil
 }
 
@@ -173,14 +170,14 @@ func (c *ConnectionSvc) Ping(ctx context.Context, conn *Connection) error {
 	})
 
 	if err != nil {
-		connectionLogger.Println(err)
+		connectionLogger.Error(err.Error())
 		return err
 	}
 	if _, err := c.broadCastClient.PostToConnection(&apigatewaymanagementapi.PostToConnectionInput{
 		ConnectionId: &conn.ConnectionId,
 		Data:         d,
 	}); err != nil {
-		connectionLogger.Printf("failed to send message to connectionID='%s' client='%s'", conn.ConnectionId, conn.Email)
+		connectionLogger.Error("failed to send message,", slog.String("connectionID", conn.ConnectionId), slog.String("email", conn.Email))
 	}
 	return nil
 }

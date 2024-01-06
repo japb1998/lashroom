@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"time"
+
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/japb1998/control-tower/internal/database"
@@ -16,9 +17,6 @@ import (
 
 var (
 	ErrInvalidDateString = errors.New("provided input string is not a valid date.")
-)
-var (
-	clientLogger = log.New(os.Stdout, "[Client Service]", log.Default().Flags())
 )
 
 type ClientRepository interface {
@@ -150,18 +148,18 @@ func (c *ClientService) UpdateUser(createdBy string, clientId string, client Pat
 		lastSeen, err := time.Parse(time.RFC3339, *client.LastSeen)
 
 		if err != nil {
-			clientLogger.Println(err)
+			clientLogger.Error(err.Error())
 			return ClientDto{}, fmt.Errorf("lastSeen could not me converted to date error='%s'", err)
 		}
 		patch.LastSeen = &lastSeen
 	}
 
-	clientLogger.Println("Updating User payload=", patch)
+	clientLogger.Info("Updating User", slog.Any("patch", patch))
 
 	item, err := c.Store.UpdateUser(createdBy, clientId, patch)
 
 	if err != nil {
-		clientLogger.Println(err)
+		clientLogger.Error(err.Error())
 		return ClientDto{}, err
 	}
 
@@ -179,6 +177,7 @@ func (c *ClientService) CreateClient(createdBy string, client CreateClient) (Cli
 	_, err = c.Store.CreateClient(*item)
 
 	if err != nil {
+		clientLogger.Error(err.Error())
 		return ClientDto{}, err
 	}
 
@@ -199,6 +198,7 @@ func (c *ClientService) GetClientById(createdBy, id string) (*ClientDto, error) 
 	item, err := c.Store.GetClientById(createdBy, id)
 
 	if err != nil {
+		clientLogger.Error(err.Error())
 		return nil, err
 	}
 
@@ -213,10 +213,10 @@ func (c *ClientService) GetClientWithFilters(createdBy string, dto ClientPaginat
 		ls, err := time.Parse(time.RFC3339, *dto.LastSeen)
 
 		if err != nil {
-			clientLogger.Println(err)
+			clientLogger.Error(err.Error())
 			return FiltersResponseDto{}, fmt.Errorf("failed to convert lastSeen Date error='%s'", ErrInvalidDateString)
 		}
-		clientLogger.Println("lastSeen at=%w", ls)
+		clientLogger.Info("lastSeen", slog.Time("at", ls))
 		lastSeen = &ls
 	}
 
@@ -281,6 +281,7 @@ func (c *ClientService) GetClientWithFilters(createdBy string, dto ClientPaginat
 	close(itemCountChan)
 	close(itemsListChan)
 
+	clientLogger.Info("Successfully retrieved clients.")
 	return FiltersResponseDto{
 		Total: itemCount,
 		Data:  clientList,
@@ -294,7 +295,7 @@ func (c *ClientService) OptOut(createdBy, clientId string) error {
 		OptIn: aws.Bool(false),
 	}
 	if _, err := c.Store.UpdateUser(createdBy, clientId, patch); err != nil {
-		clientLogger.Printf("Unable to unsubscribe user createdBy='%s', clientId='%s' error=%s", createdBy, clientId, err)
+		clientLogger.Error("Unable to unsubscribe user createdBy='%s', clientId='%s' error=%s", createdBy, clientId, err)
 		return fmt.Errorf("Unable to unsubscribe user")
 	}
 
