@@ -37,7 +37,7 @@ func init() {
 	//client service
 	clientStore := database.NewClientRepo(sess)
 	clientService = service.NewClientSvc(clientStore)
-	notificationLogger.Println("Controllers Initialized")
+	notificationLogger.Info("Controllers Initialized")
 
 	// ws service
 	apigw := apigateway.NewApiGatewayClient(sess, os.Getenv("WS_HTTPS_URL"))
