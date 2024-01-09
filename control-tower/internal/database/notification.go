@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -244,11 +243,15 @@ func (r *notificationRepository) GetNotificationsByCreator(createdBy string, ops
 			":createdBy": creatorAttr,
 		},
 		ExclusiveStartKey: LastEvaluatedKey,
-	}
-	if ops.Limit > 0 && ops.Skip == 0 {
-		input.Limit = aws.Int64(int64(ops.Limit))
+		ScanIndexForward:  aws.Bool(true),
+		IndexName:         aws.String("DATE"),
+		Limit:             aws.Int64(int64(ops.Limit + ops.Skip)),
 	}
 	for {
+		if len(items) != 0 {
+			input.Limit = aws.Int64(int64(ops.Limit + ops.Skip - len(items)))
+		}
+
 		output, err := r.client.Query(input)
 		if err != nil {
 			return nil, fmt.Errorf("error querying notification by creator: %w", err)
@@ -267,21 +270,6 @@ func (r *notificationRepository) GetNotificationsByCreator(createdBy string, ops
 		}
 		LastEvaluatedKey = output.LastEvaluatedKey
 	}
-	sort.Slice(items, func(i, j int) bool {
-		timeI, err := time.Parse(time.RFC3339, items[i].Date)
-		if err != nil {
-			notificationLogger.Println(err)
-			return false
-		}
-
-		timeJ, err := time.Parse(time.RFC3339, items[j].Date)
-		if err != nil {
-			notificationLogger.Println(err)
-			return true
-		}
-
-		return timeJ.After(timeI)
-	})
 	// manual pagination.
 	if len(items) > ops.Skip+ops.Limit {
 		items = items[ops.Skip : ops.Skip+ops.Limit]

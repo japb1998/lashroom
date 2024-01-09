@@ -3,18 +3,18 @@ package controller
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/japb1998/control-tower/internal/service"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
-	clientLogger = log.New(os.Stdout, "[Client Controller] ", log.Default().Flags())
+	tracer trace.Tracer
 )
 var clientService *service.ClientService
 
@@ -22,9 +22,9 @@ func GetClientsByCreator(c *gin.Context) {
 
 	userEmail := c.MustGet("email").(string)
 
-	if clientDtoList, err := clientService.GetClientsByCreator(userEmail); err != nil {
+	if clientDtoList, err := clientService.GetClientsByCreator(c.Request.Context(), userEmail); err != nil {
 
-		clientLogger.Println(err)
+		clientLogger.Error("GetClientsByCreator", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]string{
 			"message": "Error while retrieving clients",
 		})
@@ -54,7 +54,7 @@ func CreateClient(c *gin.Context) {
 	var clientDto service.CreateClient
 
 	if err := c.ShouldBindJSON(&clientDto); err != nil {
-		clientLogger.Println(err)
+		clientLogger.Error("CreateClient validation error", slog.String("error", err.Error()))
 		var ve validator.ValidationErrors
 
 		if errors.As(err, &ve) {
@@ -65,7 +65,7 @@ func CreateClient(c *gin.Context) {
 					Message: getErrorMsg(fe),
 					Field:   fe.Field(),
 				}
-				clientLogger.Println(fe)
+				clientLogger.Error("CreateClient validation error", slog.String("error", fe.Error()))
 			}
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"errors": output,
@@ -78,8 +78,8 @@ func CreateClient(c *gin.Context) {
 		return
 	}
 
-	if client, err := clientService.CreateClient(userEmail, clientDto); err != nil {
-		log.Println(err)
+	if client, err := clientService.CreateClient(c.Request.Context(), userEmail, clientDto); err != nil {
+		clientLogger.Error("Error creating user", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "error creating user"})
 		return
 	} else {
@@ -104,7 +104,7 @@ func UpdateClient(c *gin.Context) {
 	var clientDto service.PatchClient
 
 	if err := c.ShouldBindJSON(&clientDto); err != nil {
-		clientLogger.Println(err)
+		clientLogger.Error("Error validating UpdateClient payload", slog.String("error", err.Error()))
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
 			out := make([]ErrMsg, len(ve))
@@ -126,8 +126,9 @@ func UpdateClient(c *gin.Context) {
 		return
 	}
 
-	if client, err := clientService.UpdateUser(userEmail, clientId, clientDto); err != nil {
-		clientLogger.Println(err)
+	if client, err := clientService.UpdateUser(c.Request.Context(), userEmail, clientId, clientDto); err != nil {
+
+		clientLogger.Error("Error updating user", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	} else {
 		c.JSON(http.StatusOK, client)
@@ -148,10 +149,10 @@ func GetClientByID(c *gin.Context) {
 	userEmail := c.MustGet("email").(string)
 	clientId, _ := c.Params.Get("id")
 
-	client, err := clientService.GetClientById(userEmail, clientId)
+	client, err := clientService.GetClientById(c.Request.Context(), userEmail, clientId)
 
 	if err != nil {
-		clientLogger.Println(err.Error())
+		clientLogger.Error("Error Getting client by ID", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "error getting user"})
 		return
 	} else if client == nil {
@@ -179,7 +180,7 @@ func DeleteClient(c *gin.Context) {
 	err := clientService.DeleteClient(userEmail, clientId)
 
 	if err != nil {
-		clientLogger.Println(err.Error())
+		clientLogger.Error("Error deleting client", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "error deleting user"})
 		return
 	}
@@ -209,7 +210,7 @@ func OptOut(c *gin.Context) {
 		return
 	}
 
-	if err := clientService.OptOut(creator, client); err != nil {
+	if err := clientService.OptOut(c.Request.Context(), creator, client); err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -234,10 +235,13 @@ func OptOut(c *gin.Context) {
 // @Success 200 {object} service.FiltersResponseDto
 // @Router /clients [get]
 func ClientsWithFilters(c *gin.Context) {
+	ctx, span := tracer.Start(c.Request.Context(), "client-with-filter-controller")
+	defer span.End()
+
 	requestorEmail := c.MustGet("email").(string)
 	var paginationDto service.ClientPaginationDto
 	if err := c.ShouldBindWith(&paginationDto, binding.Query); err != nil {
-		clientLogger.Println(err)
+		clientLogger.Error("Error on filters validation", slog.String("error", err.Error()))
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
 			out := make([]ErrMsg, len(ve))
@@ -264,7 +268,12 @@ func ClientsWithFilters(c *gin.Context) {
 		paginationDto.Limit = 10
 	}
 
-	if response, err := clientService.GetClientWithFilters(requestorEmail, paginationDto); err != nil {
+	childCtx, childSpan := tracer.Start(ctx, "client-service")
+	childSpan.AddEvent("get-client")
+
+	defer childSpan.End()
+
+	if response, err := clientService.GetClientWithFilters(childCtx, requestorEmail, paginationDto); err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": err,
 		})

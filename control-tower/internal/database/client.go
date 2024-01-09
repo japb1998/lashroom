@@ -27,16 +27,17 @@ type ClientRepository struct {
 }
 
 type PatchClientItem struct {
-	Phone       string `json:"phone"`
-	Email       string `json:"email"`
-	FirstName   string `json:"firstName"`
-	LastName    string `json:"lastName"`
-	Description string `json:"description"`
-	OptIn       *bool  `json:"optIn"`
+	Phone       string     `json:"phone"`
+	Email       string     `json:"email"`
+	FirstName   string     `json:"firstName"`
+	LastName    string     `json:"lastName"`
+	LastSeen    *time.Time `json:"lastSeen"`
+	Description string     `json:"description"`
+	OptIn       *bool      `json:"optIn"`
 }
 
 func NewClientRepo(sess *session.Session) *ClientRepository {
-	clientLogger.Println(os.Getenv("CLIENT_TABLE"))
+	clientLogger.Println("client Table ", os.Getenv("CLIENT_TABLE"))
 	if clientRepository == nil {
 		client := newDynamoClient(sess)
 		clientRepository = &ClientRepository{
@@ -59,9 +60,10 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]model.Client
 
 		return nil, fmt.Errorf("invalid creator: %s", createdBy)
 	}
+
 	clientEntityList := make([]model.ClientItem, 0)
 	var lastEvaluatedKey map[string]*dynamodb.AttributeValue
-	clientLogger.Printf("table name: %s", c.tableName)
+
 	queryInput := &dynamodb.QueryInput{
 		TableName:                 &c.tableName,
 		KeyConditionExpression:    aws.String("#primaryKey = :primaryKey"),
@@ -140,6 +142,12 @@ func (c *ClientRepository) ClientCountWithFilters(createdBy string, clientPatch 
 		filterExpressionList = append(filterExpressionList, "contains(#lastName, :lastName)")
 	}
 
+	if clientPatch.LastSeen != nil {
+		attributeValues[":lastSeen"] = clientPatch.LastSeen
+		expressionAttributeNames["#lastSeen"] = aws.String("lastSeen")
+		filterExpressionList = append(filterExpressionList, "#lastSeen = :lastSeen")
+	}
+
 	marshaledValues, err := dynamodbattribute.MarshalMap(attributeValues)
 
 	if err != nil {
@@ -175,6 +183,8 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 	var queryInput = &dynamodb.QueryInput{
 		TableName:         &c.tableName,
 		ExclusiveStartKey: lastEvaluatedKey,
+		Limit:             aws.Int64(int64(p.Skip + p.Limit)),
+		ScanIndexForward:  aws.Bool(true),
 	}
 	primaryKeyExpressionList := []string{"#primaryKey = :primaryKey"}
 
@@ -209,6 +219,12 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 		filterExpressionList = append(filterExpressionList, "contains(#lastName, :lastName)")
 	}
 
+	if clientPatch.LastSeen != nil {
+		clientLogger.Println("Last Seen='%w'", clientPatch.LastSeen)
+		attributeValues[":lastSeen"] = clientPatch.LastSeen
+		expressionAttributeNames["#lastSeen"] = aws.String("lastSeen")
+		filterExpressionList = append(filterExpressionList, "#lastSeen = :lastSeen")
+	}
 	// values
 	marshaledValues, err := dynamodbattribute.MarshalMap(attributeValues)
 
@@ -229,13 +245,11 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 
 	queryInput.KeyConditionExpression = aws.String(strings.Join(primaryKeyExpressionList, " and "))
 
-	// if any limit is setup
-	if p.Limit > 0 && p.Skip == 0 {
-		queryInput.Limit = aws.Int64(int64(p.Limit))
-	}
-
 	// loop until lastEvaluated key is nil or we reach our limit setup by the pagination.
 	for {
+		if len(clientEntityList) != 0 {
+			queryInput.Limit = aws.Int64(int64(p.Limit + p.Skip - len(clientEntityList)))
+		}
 		var clients []model.ClientItem
 		// lastEvaluated key everytime we start. 1st is nil
 		queryInput.ExclusiveStartKey = lastEvaluatedKey
@@ -339,6 +353,12 @@ func (c *ClientRepository) UpdateUser(createdBy string, clientId string, client 
 		updateExpressionValues[":optIn"] = *client.OptIn
 		updateExpressionNames["#optIn"] = aws.String("optIn")
 		expressionList = append(expressionList, "#optIn = :optIn")
+	}
+
+	if client.LastSeen != nil {
+		updateExpressionValues[":lastSeen"] = client.LastSeen
+		updateExpressionNames["#lastSeen"] = aws.String("lastSeen")
+		expressionList = append(expressionList, "#lastSeen = :lastSeen")
 	}
 
 	if len(expressionList) == 0 {

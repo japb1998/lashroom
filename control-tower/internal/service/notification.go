@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -15,7 +15,6 @@ import (
 
 var (
 	notificationHandler = os.Getenv("NOTIFICATION_LAMBDA")
-	notificationLogger  = log.New(os.Stdout, "[Notification Service]", log.Default().Flags())
 )
 
 const (
@@ -137,7 +136,7 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 		if errors.Is(err, database.ErrNotificationNotFound) {
 			return fmt.Errorf("Error ocurred error='%w'. Notification with ID='%s'", ErrNotificationNotFound, id)
 		}
-		notificationLogger.Println(err)
+		notificationLogger.Error(err.Error())
 		return fmt.Errorf("failed to find notification with ID='%s', err: %w", id, err)
 	}
 
@@ -145,7 +144,7 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 		err = s.scheduler.DeleteSchedule(id, i.ClientToken)
 		if err != nil {
 			if !errors.Is(err, scheduler.ErrNotFound) {
-				notificationLogger.Printf("error while removing schedule: %s", err)
+				notificationLogger.Error("error while removing schedule", slog.String("error", err.Error()))
 				return fmt.Errorf("failed to delete schedule")
 			}
 		}
@@ -154,7 +153,7 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 	err = s.store.Delete(createdBy, id)
 
 	if err != nil {
-		notificationLogger.Printf("error while deleting notification from db: %s", err)
+		notificationLogger.Error("error while deleting notification from db", slog.String("error", err.Error()))
 		return fmt.Errorf("failed to delete notification")
 	}
 
@@ -162,22 +161,24 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 }
 
 // ScheduleNotification schedules a new execution and stores the schedule ID in the db
-func (s *NotificationService) ScheduleNotification(createdBy string, notification *NotificationInput) error {
+func (s *NotificationService) ScheduleNotification(createdBy string, notification *NotificationInput) (id string, err error) {
 	// we parse the incoming date in UTC
 	date, err := time.Parse(time.RFC3339, notification.Date)
 	if err != nil {
-		return fmt.Errorf("invalid notification date error: %w", err)
+		return "", fmt.Errorf("invalid notification date error: %w", err)
 	}
 	// item uuid is generated here.
 	i := model.NewNotificationItem(createdBy, NotSentStatus.String(), notification.ClientId, date, notification.DeliveryMethods)
+	// set id to be returned here.
+	id = i.SortKey
 
 	newNotification := NewNotification(createdBy, i.SortKey, i.ClientToken, notification)
 
 	payload, err := json.Marshal(newNotification)
 
 	if err != nil {
-		notificationLogger.Printf("error while marshalling notification payload: %s", err)
-		return fmt.Errorf("error while scheduling notification")
+		notificationLogger.Error("error while marshalling notification payload", slog.String("error", err.Error()))
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 
 	// create event bridge event
@@ -187,26 +188,27 @@ func (s *NotificationService) ScheduleNotification(createdBy string, notificatio
 	_, err = s.scheduler.CreateSchedule(sch, i.ClientToken)
 
 	if err != nil {
-		notificationLogger.Printf("error while creating schedule: %s", err)
+		notificationLogger.Error("error while creating schedule", slog.String("error", err.Error()))
 		if errors.Is(err, scheduler.ErrInvalidDate) {
-			return ErrInvalidDate
+			return "", ErrInvalidDate
 		}
-		return fmt.Errorf("error while scheduling notification")
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 	// store in dynamo .
 	err = s.store.Create(*i)
 
 	if err != nil {
-		notificationLogger.Printf("error while storing notification: %s", err)
+		notificationLogger.Error("error while storing notification", slog.String("error", err.Error()))
 		// clean up the notification
 		err = s.scheduler.DeleteSchedule(newNotification.ID, i.ClientToken)
-		notificationLogger.Println("failed to cleanup notification err: ", err)
+		notificationLogger.Error("failed to cleanup notification", slog.String("error", err.Error()))
 
-		return fmt.Errorf("error while scheduling notification")
+		return "", fmt.Errorf("error while scheduling notification")
 	}
 
-	notificationLogger.Printf("notification created ID: '%s'", newNotification.ID)
-	return nil
+	notificationLogger.Info("notification created", slog.String("notificationId", newNotification.ID))
+
+	return id, nil
 }
 
 // UpdateNotification function allows you to update all notification fields except status for status use SetNotificationStatus.
@@ -216,7 +218,7 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 	patchItem := database.PatchNotificationItem{}
 	if err != nil {
 
-		notificationLogger.Println(err)
+		notificationLogger.Error(err.Error())
 		return Notification{}, fmt.Errorf("Unable to get notification")
 	}
 	err = json.Unmarshal([]byte(sch.Payload), &input)
@@ -233,7 +235,6 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 		input.DeliveryMethods = ps.DeliveryMethods
 		patchItem.DeliveryMethods = ps.DeliveryMethods
 	}
-	notificationLogger.Println(ps.Date)
 	if ps.Date != "" {
 		t, err := time.Parse(time.RFC3339, ps.Date)
 
@@ -270,7 +271,7 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 	_, err = s.store.UpdateNotification(createdBy, name, patchItem)
 
 	if err != nil {
-		notificationLogger.Println(err)
+		notificationLogger.Error(err.Error())
 		// TODO: if error when updating the db -  rollback
 		return Notification{}, fmt.Errorf("DB failed to updated")
 	}
@@ -281,7 +282,7 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 func (s *NotificationService) SetNotificationStatus(createdBy string, id string, status notificationStatus) error {
 	err := s.store.SetStatus(createdBy, id, string(status))
 	if err != nil {
-		notificationLogger.Println(err)
+		notificationLogger.Error(err.Error())
 		return fmt.Errorf("error when setting status")
 	}
 	return nil
@@ -293,10 +294,10 @@ func (s *NotificationService) GetNotification(createdBy, name string) (*Notifica
 
 	if err != nil {
 		if errors.Is(err, database.ErrNotificationNotFound) {
-			notificationLogger.Printf("Notification ID='%s' NOT FOUND", name)
+			notificationLogger.Error("Notification NOT FOUND", name)
 			return nil, fmt.Errorf("error occurred error: %w", ErrNotificationNotFound)
 		}
-		notificationLogger.Printf("Error: %s", err)
+		notificationLogger.Error("Error getting notification", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error getting notification")
 	}
 
@@ -318,11 +319,11 @@ func (s *NotificationService) GetNotificationsByCreator(createdBy string, ops *P
 		Skip:  ops.Limit * ops.Page,
 		Limit: ops.Limit,
 	}
-	notificationLogger.Printf("skip %d", ops.Limit*ops.Page)
+	notificationLogger.Info("skip", slog.Int("skip", ops.Limit*ops.Page))
 	paginatedItems, err := s.store.GetNotificationsByCreator(createdBy, &dbOps)
 
 	if err != nil {
-		notificationLogger.Printf("Error: %s", err)
+		notificationLogger.Error("Error", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error while getting notifications creator: %s, error: %w", createdBy, err)
 	}
 

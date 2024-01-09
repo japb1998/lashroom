@@ -11,8 +11,8 @@ import (
 
 	"github.com/japb1998/lashroom/cliApp/internals/booksy"
 	"github.com/japb1998/lashroom/cliApp/internals/utils"
-	"github.com/japb1998/lashroom/scheduleEmail/pkg/client"
-	"github.com/japb1998/lashroom/shared/pkg/database"
+	"github.com/japb1998/lashroom/scheduleEmail/internal/client"
+	"github.com/japb1998/lashroom/shared/internal/database"
 )
 
 var wg sync.WaitGroup

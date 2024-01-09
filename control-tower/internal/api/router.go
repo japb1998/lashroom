@@ -3,10 +3,10 @@ package api
 import (
 	"log"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
-	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -15,11 +15,10 @@ import (
 	"github.com/japb1998/control-tower/internal/controller"
 	swaggerfiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 type Response events.APIGatewayProxyResponse
-
-var ginLambda *ginadapter.GinLambda
 
 var (
 	TableName    = os.Getenv("EMAIL_TABLE")
@@ -28,17 +27,30 @@ var (
 	routerLogger = log.New(os.Stdout, "[Router] ", log.Default().Flags())
 )
 
-func Serve() {
+const (
+	ScopeName = "github.com/japb1998/control-tower/internal/api"
+)
+
+func InitRoutes() *gin.Engine {
 	routerLogger.Printf("Gin cold start")
 	r := gin.Default()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		v.RegisterValidation("rfc3339", func(fl validator.FieldLevel) bool {
-			routerLogger.Println("registering validation rfc3339")
-			if fl.Field().String() == "" {
-				return true
+
+			var field string
+			if reflect.PointerTo(fl.Field().Type()).Kind() == reflect.String {
+				if !fl.Field().Addr().IsNil() {
+					return true
+				}
+				field = fl.Field().Addr().String()
+			} else {
+				if fl.Field().String() == "" {
+					return true
+				}
+				field = fl.Field().String()
 			}
 
-			_, err := time.Parse(time.RFC3339, fl.Field().String())
+			_, err := time.Parse(time.RFC3339, field)
 
 			if err != nil {
 				return false
@@ -55,6 +67,9 @@ func Serve() {
 	corsConfig.AllowCredentials = true
 	corsConfig.AllowHeaders = []string{"*"}
 	corsConfig.AddAllowMethods("OPTIONS", "GET", "PUT", "PATCH")
+
+	r.Use(otelgin.Middleware(ScopeName))
+
 	r.Use(cors.New(corsConfig))
 
 	// SWAGGER
@@ -89,12 +104,6 @@ func Serve() {
 		clients.DELETE("/:id", controller.DeleteClient)
 	}
 
-	if os.Getenv("STAGE") == "local" {
-		if err := r.Run(os.Getenv("PORT")); err != nil {
-			routerLogger.Fatal("Error while starting the server")
-		}
-	} else {
-		ginLambda = ginadapter.New(r)
-	}
+	return r
 
 }

@@ -1,14 +1,17 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"sort"
+	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
@@ -20,7 +23,6 @@ import (
 var (
 	TableName           = os.Getenv("EMAIL_TABLE")
 	ClientTable         = os.Getenv("CLIENT_TABLE")
-	notificationLogger  = log.New(os.Stdout, "[Notification Controller] ", log.Default().Flags())
 	notificationService *service.NotificationService
 )
 
@@ -63,9 +65,13 @@ func GetSchedules(c *gin.Context) {
 
 	userEmail := c.MustGet("email").(string)
 
-	var ops PaginationOps
+	var ops = PaginationOps{
+		Limit: aws.Int(10),
+		Page:  0,
+	}
+
 	if err := c.ShouldBindWith(&ops, binding.Query); err != nil {
-		notificationLogger.Println(err)
+		notificationLogger.Error("error validating schedule filters", slog.String("error", err.Error()))
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
 			out := make([]ErrMsg, len(ve))
@@ -87,7 +93,7 @@ func GetSchedules(c *gin.Context) {
 		return
 	}
 
-	clientLogger.Printf("pagination ops page: %d, limit: %d", ops.Page, *ops.Limit)
+	clientLogger.Info("pagination ops", slog.Int("page", ops.Page), slog.Int("limit", *ops.Limit))
 
 	svcOps := service.PaginationOps{
 		Page: ops.Page,
@@ -114,7 +120,7 @@ func GetSchedules(c *gin.Context) {
 		return
 	}
 
-	nl, err := aggregateNotifications(res.Data)
+	nl, err := aggregateNotifications(c.Request.Context(), res.Data)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -153,7 +159,7 @@ func GetSchedule(c *gin.Context) {
 	id, _ := c.Params.Get("id")
 	userEmail := c.MustGet("email").(string)
 
-	notificationLogger.Printf("GetSchedule By ID='%s'\n", id)
+	notificationLogger.Info("GetSchedule By", slog.String("id", id))
 
 	notification, err := notificationService.GetNotification(userEmail, id)
 
@@ -184,6 +190,8 @@ func GetSchedule(c *gin.Context) {
 // @Success 204
 // @Router /schedule [post]
 func PostSchedule(c *gin.Context) {
+	ctx, startSpan := tracer.Start(c.Request.Context(), "post-schedule")
+	defer startSpan.End()
 	defer c.Request.Body.Close()
 	userEmail := c.MustGet("email").(string)
 	var schedule service.NotificationInput
@@ -204,23 +212,25 @@ func PostSchedule(c *gin.Context) {
 			})
 			return
 		}
-		notificationLogger.Println(err)
+		notificationLogger.Error("error on validation", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create schedule",
 		})
 		return
 	}
+	clientCtx, clientSpan := tracer.Start(ctx, "get-client")
 
-	user, err := clientService.GetClientById(userEmail, schedule.ClientId)
+	user, err := clientService.GetClientById(clientCtx, userEmail, schedule.ClientId)
 
 	if err != nil {
-		notificationLogger.Println(err)
+		notificationLogger.Error("Error getting client", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create schedule",
 		})
+		clientSpan.End()
 		return
 	}
-
+	clientSpan.End()
 	if *user.OptIn == false {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("Client ID='%s' has notifications disabled.", user.Id),
@@ -228,7 +238,9 @@ func PostSchedule(c *gin.Context) {
 		return
 	}
 
-	err = notificationService.ScheduleNotification(userEmail, &schedule)
+	_, scheduleSpan := tracer.Start(ctx, "create-schedule")
+
+	id, err := notificationService.ScheduleNotification(userEmail, &schedule)
 
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidDate) {
@@ -240,13 +252,27 @@ func PostSchedule(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to create schedule",
 		})
+		scheduleSpan.End()
 		return
 	}
+	scheduleSpan.End()
 
+	var wg sync.WaitGroup
+	/*
+		TODO: move ws notification to eventBridge event handler.
+	*/
+	go func() {
+		wg.Add(1)
+		if err := sendUserNotification(c.Request.Context(), user.Email, id, service.NotificationCreatedAction); err != nil {
+			notificationLogger.Error("error sending ws message", slog.String("error", err.Error()))
+		}
+
+	}()
 	c.Writer.WriteHeader(204)
+	wg.Wait()
 }
 
-// UpdateSchedule creates schedule.
+// UpdateSchedule updates schedule.
 // @Summary patch existing schedule by id.
 // @Schemes
 // @Description patch existing schedule by id.
@@ -280,13 +306,12 @@ func UpdateSchedule(c *gin.Context) {
 			})
 			return
 		}
-		notificationLogger.Println(err)
+		notificationLogger.Error("error on validation", slog.String("error", err.Error()), "")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to update schedule",
 		})
 		return
 	}
-	notificationLogger.Println(notification.Date)
 	n, err := notificationService.UpdateNotification(userEmail, id, notification)
 
 	if err != nil {
@@ -334,7 +359,7 @@ func DeleteSchedule(c *gin.Context) {
 }
 
 // aggregateNotifications receives a service.Notification List and retrieves a Notification with the full client struct.
-func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
+func aggregateNotifications(ctx context.Context, nl []service.Notification) ([]Notification, error) {
 
 	notificationList := make([]Notification, 0, len(nl))
 	errChan := make(chan error, 1)
@@ -344,10 +369,10 @@ func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
 
 		go func(n service.Notification) {
 
-			c, err := clientService.GetClientById(n.CreatedBy, n.ClientId)
+			c, err := clientService.GetClientById(ctx, n.CreatedBy, n.ClientId)
 
 			if err != nil {
-				notificationLogger.Println(err)
+				notificationLogger.Error("error getting user", slog.String("error", err.Error()))
 				errChan <- fmt.Errorf("failed to get schedules")
 				return
 			}
@@ -375,4 +400,20 @@ func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
 	}
 
 	return notificationList, nil
+}
+
+func sendUserNotification(ctx context.Context, email, notificationId, action string) error {
+	msg, err := service.NewNotificationUpdateMsg(email, notificationId).WithAction(action)
+
+	if err != nil {
+		notificationLogger.Error("failed to notify using ws", slog.String("error", err.Error()))
+		return err
+	}
+	err = connectionSvc.SendWsMessageByEmail(ctx, msg)
+
+	if err != nil {
+		notificationLogger.Error("failed to notify using", slog.String("error", err.Error()))
+		return err
+	}
+	return nil
 }

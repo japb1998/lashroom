@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,9 +9,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func getUserEmailFromToken(tokenString string) (string, error) {
+var tracer trace.Tracer
+
+func getUserEmailFromToken(ctx context.Context, tokenString string) (string, error) {
+	_, span := tracer.Start(ctx, "getUserEmailFromToken")
+	defer span.End()
 	claims := jwt.MapClaims{}
 	tokenSlice := strings.Split(tokenString, " ")
 	if len(tokenSlice) < 2 {
@@ -33,28 +42,38 @@ func getUserEmailFromToken(tokenString string) (string, error) {
 
 func currentUserMiddleWare() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx, userSpan := tracer.Start(c.Request.Context(), "currentUserMiddleWare")
+
 		routerLogger.Println("Extracting User")
 
 		token, ok := c.Request.Header["Authorization"]
 
 		if !ok {
+			userSpan.SetStatus(codes.Error, "Unauthorized")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Unauthorized",
 			})
 			c.Abort()
 			return
 		}
-		email, err := getUserEmailFromToken(token[0])
+		email, err := getUserEmailFromToken(ctx, token[0])
 
 		if err != nil {
 			routerLogger.Println(err)
+			userSpan.SetStatus(codes.Error, "Unauthorized")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Unauthorized",
 			})
 			c.Abort()
 			return
 		}
+		userSpan.SetAttributes(attribute.String("email", email))
 		c.Set("email", email)
+		userSpan.End()
 		c.Next()
 	}
+}
+
+func init() {
+	tracer = otel.Tracer(ScopeName)
 }
