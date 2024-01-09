@@ -7,8 +7,8 @@ import (
 
 // handlers
 var (
-	clientHandler       = slog.NewTextHandler(os.Stdin, nil).WithAttrs([]slog.Attr{slog.String("name", "clientController")})
-	notificationHandler = slog.NewTextHandler(os.Stdin, nil).WithAttrs([]slog.Attr{slog.String("name", "notificationController")})
+	clientHandler       = slog.NewTextHandler(os.Stdout, nil).WithAttrs([]slog.Attr{slog.String("name", "clientController")})
+	notificationHandler = slog.NewTextHandler(os.Stdout, nil).WithAttrs([]slog.Attr{slog.String("name", "notificationController")})
 )
 
 // loggers

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -118,7 +119,7 @@ func NewClientSvc(s ClientRepository) *ClientService {
 		Store: s,
 	}
 }
-func (c *ClientService) GetClientsByCreator(createdBy string) ([]ClientDto, error) {
+func (c *ClientService) GetClientsByCreator(ctx context.Context, createdBy string) ([]ClientDto, error) {
 	clientList, err := c.Store.GetClientsByCreator(createdBy)
 
 	if err != nil {
@@ -133,7 +134,7 @@ func (c *ClientService) GetClientsByCreator(createdBy string) ([]ClientDto, erro
 	return dtos, err
 }
 
-func (c *ClientService) UpdateUser(createdBy string, clientId string, client PatchClient) (ClientDto, error) {
+func (c *ClientService) UpdateUser(ctx context.Context, createdBy, clientId string, client PatchClient) (ClientDto, error) {
 
 	patch := database.PatchClientItem{
 		Phone:       client.Phone,
@@ -166,7 +167,7 @@ func (c *ClientService) UpdateUser(createdBy string, clientId string, client Pat
 	return *NewClientFromItem(item), nil
 }
 
-func (c *ClientService) CreateClient(createdBy string, client CreateClient) (ClientDto, error) {
+func (c *ClientService) CreateClient(ctx context.Context, createdBy string, client CreateClient) (ClientDto, error) {
 	lastSeen, err := time.Parse(time.RFC3339, *client.LastSeen)
 	if err != nil {
 		log.Printf("failed to convert lastSeen error:'%s'\n", err)
@@ -194,7 +195,7 @@ func (c *ClientService) DeleteClient(createdBy, id string) error {
 	return nil
 }
 
-func (c *ClientService) GetClientById(createdBy, id string) (*ClientDto, error) {
+func (c *ClientService) GetClientById(ctx context.Context, createdBy, id string) (*ClientDto, error) {
 	item, err := c.Store.GetClientById(createdBy, id)
 
 	if err != nil {
@@ -206,7 +207,7 @@ func (c *ClientService) GetClientById(createdBy, id string) (*ClientDto, error) 
 }
 
 // GetClientWithFilters get clients with filters. Paginated, Zero indexed
-func (c *ClientService) GetClientWithFilters(createdBy string, dto ClientPaginationDto) (FiltersResponseDto, error) {
+func (c *ClientService) GetClientWithFilters(ctx context.Context, createdBy string, dto ClientPaginationDto) (FiltersResponseDto, error) {
 
 	var lastSeen *time.Time
 	if dto.LastSeen != nil {
@@ -290,7 +291,7 @@ func (c *ClientService) GetClientWithFilters(createdBy string, dto ClientPaginat
 	}, nil
 }
 
-func (c *ClientService) OptOut(createdBy, clientId string) error {
+func (c *ClientService) OptOut(ctx context.Context, createdBy, clientId string) error {
 	patch := database.PatchClientItem{
 		OptIn: aws.Bool(false),
 	}
