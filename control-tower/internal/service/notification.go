@@ -235,7 +235,6 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 		input.DeliveryMethods = ps.DeliveryMethods
 		patchItem.DeliveryMethods = ps.DeliveryMethods
 	}
-
 	if ps.Date != "" {
 		t, err := time.Parse(time.RFC3339, ps.Date)
 
