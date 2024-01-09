@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/japb1998/control-tower/internal/service"
@@ -28,7 +29,7 @@ func sendEmailReminder(ctx context.Context, firstName, lastName, opOutUrl string
 		return err
 
 	} else {
-		handlerLogger.Printf("Email Sent to='%v'\n", to)
+		handlerLogger.Info("Email Sent", slog.Any("to", to))
 		return err
 	}
 }

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -16,7 +16,8 @@ import (
 )
 
 // TODO: change logger to use slog.
-var handlerLogger = log.New(os.Stdout, "[Handler] ", log.Default().Flags())
+var logHandler = slog.NewTextHandler(os.Stdout, nil)
+var handlerLogger = slog.New(logHandler).With(slog.String("name", "scheduler-handler"))
 var tracer trace.Tracer
 var msgSvc *sms.MsgSvc
 var apiUrl = os.Getenv("API_URL")

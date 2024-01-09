@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"log/slog"
 	"os"
 
 	"github.com/japb1998/control-tower/internal/apigateway"
@@ -35,13 +36,15 @@ func init() {
 	b, err := cm.GetSecret(secretArn)
 
 	if err != nil {
-		handlerLogger.Fatalf("error getting secret arn='%s', error='%s'", secretArn, err)
+		handlerLogger.Error("error getting secret", slog.String("arn", secretArn), slog.String("error", err.Error()))
+		panic("error initializing handler")
 	}
 
 	err = json.Unmarshal([]byte(*b), &ops)
 
 	if err != nil {
-		handlerLogger.Fatalf("error unmarshalling secret, error='%s'", err)
+		handlerLogger.Error("error unmarshalling secret", slog.String("error", err.Error()))
+		panic("error initializing handler")
 	}
 	// email
 	emailSvc = email.NewEmailService(&ops)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -24,7 +25,7 @@ func handler(ctx context.Context, event service.Notification) error {
 	if err != nil {
 
 		for _, ve := range err.(validator.ValidationErrors) {
-			fmt.Printf("%s validation: %s failed. value='%s', param='%s'\n", ve.Namespace(), ve.Tag(), ve.Value(), ve.Param())
+			handlerLogger.Info("%s validation: %s failed. value='%s', param='%s'\n", ve.Namespace(), ve.Tag(), ve.Value(), ve.Param())
 		}
 		return fmt.Errorf("error validation ocurred")
 	}
@@ -38,7 +39,7 @@ func handler(ctx context.Context, event service.Notification) error {
 		return err
 	}
 	if *client.OptIn == false {
-		fmt.Printf("client User='%s', clientID='%s' has notifications disabled. Skipping.", event.CreatedBy, event.ClientId)
+		handlerLogger.Info("notification disabled.", slog.String("creator", event.CreatedBy), slog.String("client", event.ClientId))
 		getClientSpan.End()
 		return nil
 	}
@@ -51,7 +52,7 @@ func handler(ctx context.Context, event service.Notification) error {
 		switch service.ContactOptions(i) {
 		case service.Email:
 			if client.Email == "" {
-				handlerLogger.Println("Skipping email delivery. reason='email is empty.'")
+				handlerLogger.Error("Skipping email delivery. reason='email is empty.'")
 				errChan <- nil
 				continue
 			}
@@ -61,10 +62,10 @@ func handler(ctx context.Context, event service.Notification) error {
 				ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 				defer cancel()
 
-				opOut := fmt.Sprintf("%s/unsubscribe/%s/%s", apiUrl, client.CreatedBy, client.Id)
+				opOut := fmt.Sprint("%s/unsubscribe/%s/%s", apiUrl, client.CreatedBy, client.Id)
 
 				if err := sendEmailReminder(ctx, client.FirstName, client.LastName, opOut, []string{client.Email}); err != nil {
-					fmt.Printf("email failed to send error= %s\n", err)
+					handlerLogger.Info("email failed to send", slog.String("error", err.Error()))
 					errChan <- err
 
 				} else {
@@ -73,7 +74,7 @@ func handler(ctx context.Context, event service.Notification) error {
 			}()
 		case service.Phone:
 			if client.Phone == "" {
-				handlerLogger.Println("Skipping whatsapp delivery. reason='phone is empty.'")
+				handlerLogger.Info("Skipping whatsapp delivery. reason='phone is empty.'")
 				errChan <- nil
 				continue
 			}
@@ -82,18 +83,18 @@ func handler(ctx context.Context, event service.Notification) error {
 				defer wg.Done()
 
 				if err := sendWhatsappNotification(client.FirstName, "2", client.Phone); err != nil {
-					handlerLogger.Printf("failed to send message %s\n", err)
+					handlerLogger.Info("failed to send message %s\n", slog.String("error", err.Error()))
 					errChan <- err
 
 				} else {
-					handlerLogger.Printf("SMS was successfully sent to='%s'!\n", client.Phone)
+					handlerLogger.Info("SMS was successfully sent", slog.String("to", client.Phone))
 					errChan <- nil
 				}
 
 			}()
 
 		default:
-			handlerLogger.Printf("Invalid delivery method method: %d\n", i)
+			handlerLogger.Info("Invalid delivery method method: %d\n", i)
 			errChan <- fmt.Errorf("Invalid delivery method")
 		}
 	}
@@ -130,15 +131,14 @@ func handler(ctx context.Context, event service.Notification) error {
 
 	// we do not return an error because an error here does not mean that the delivery failed
 	if err != nil {
-		handlerLogger.Println(err)
+		handlerLogger.Error("failed to generate new notification msg", slog.String("error", err.Error()))
 		wsSpan.SetAttributes(attribute.KeyValue{
 			Key:   attribute.Key("ws-delivery"),
 			Value: attribute.BoolValue(false),
 		})
-		handlerLogger.Println(err)
 		wsSpan.End()
 	}
-	handlerLogger.Printf("WS message='%v'", msg)
+	handlerLogger.Info("WS message='%v'", msg)
 
 	err = connectionSvc.SendWsMessageByEmail(wsCtx, msg)
 	// we do not return an error because an error here does not mean that the delivery failed
@@ -147,7 +147,7 @@ func handler(ctx context.Context, event service.Notification) error {
 			Key:   attribute.Key("ws-delivery"),
 			Value: attribute.BoolValue(false),
 		})
-		handlerLogger.Println(err)
+		handlerLogger.Error("failed to send WS message", slog.String("error", err.Error()))
 		wsSpan.End()
 	}
 	wsSpan.End()
