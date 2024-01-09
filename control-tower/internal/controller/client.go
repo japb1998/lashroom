@@ -127,6 +127,7 @@ func UpdateClient(c *gin.Context) {
 	}
 
 	if client, err := clientService.UpdateUser(c.Request.Context(), userEmail, clientId, clientDto); err != nil {
+
 		clientLogger.Error("Error updating user", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	} else {

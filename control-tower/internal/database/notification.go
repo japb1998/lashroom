@@ -270,7 +270,6 @@ func (r *notificationRepository) GetNotificationsByCreator(createdBy string, ops
 		}
 		LastEvaluatedKey = output.LastEvaluatedKey
 	}
-
 	// manual pagination.
 	if len(items) > ops.Skip+ops.Limit {
 		items = items[ops.Skip : ops.Skip+ops.Limit]
