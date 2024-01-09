@@ -22,7 +22,7 @@ func GetClientsByCreator(c *gin.Context) {
 
 	userEmail := c.MustGet("email").(string)
 
-	if clientDtoList, err := clientService.GetClientsByCreator(userEmail); err != nil {
+	if clientDtoList, err := clientService.GetClientsByCreator(c.Request.Context(), userEmail); err != nil {
 
 		clientLogger.Error("GetClientsByCreator", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, map[string]string{
@@ -78,7 +78,7 @@ func CreateClient(c *gin.Context) {
 		return
 	}
 
-	if client, err := clientService.CreateClient(userEmail, clientDto); err != nil {
+	if client, err := clientService.CreateClient(c.Request.Context(), userEmail, clientDto); err != nil {
 		clientLogger.Error("Error creating user", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "error creating user"})
 		return
@@ -126,7 +126,7 @@ func UpdateClient(c *gin.Context) {
 		return
 	}
 
-	if client, err := clientService.UpdateUser(userEmail, clientId, clientDto); err != nil {
+	if client, err := clientService.UpdateUser(c.Request.Context(), userEmail, clientId, clientDto); err != nil {
 		clientLogger.Error("Error updating user", slog.String("error", err.Error()))
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	} else {
@@ -148,7 +148,7 @@ func GetClientByID(c *gin.Context) {
 	userEmail := c.MustGet("email").(string)
 	clientId, _ := c.Params.Get("id")
 
-	client, err := clientService.GetClientById(userEmail, clientId)
+	client, err := clientService.GetClientById(c.Request.Context(), userEmail, clientId)
 
 	if err != nil {
 		clientLogger.Error("Error Getting client by ID", slog.String("error", err.Error()))
@@ -209,7 +209,7 @@ func OptOut(c *gin.Context) {
 		return
 	}
 
-	if err := clientService.OptOut(creator, client); err != nil {
+	if err := clientService.OptOut(c.Request.Context(), creator, client); err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 		})
@@ -267,10 +267,12 @@ func ClientsWithFilters(c *gin.Context) {
 		paginationDto.Limit = 10
 	}
 
-	_, childSpan := tracer.Start(ctx, "service-call")
+	childCtx, childSpan := tracer.Start(ctx, "client-service")
+	childSpan.AddEvent("get-client")
+
 	defer childSpan.End()
 
-	if response, err := clientService.GetClientWithFilters(requestorEmail, paginationDto); err != nil {
+	if response, err := clientService.GetClientWithFilters(childCtx, requestorEmail, paginationDto); err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": err,
 		})

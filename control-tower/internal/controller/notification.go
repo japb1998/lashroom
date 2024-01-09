@@ -120,7 +120,7 @@ func GetSchedules(c *gin.Context) {
 		return
 	}
 
-	nl, err := aggregateNotifications(res.Data)
+	nl, err := aggregateNotifications(c.Request.Context(), res.Data)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -218,9 +218,9 @@ func PostSchedule(c *gin.Context) {
 		})
 		return
 	}
-	_, clientSpan := tracer.Start(ctx, "get-client")
+	clientCtx, clientSpan := tracer.Start(ctx, "get-client")
 
-	user, err := clientService.GetClientById(userEmail, schedule.ClientId)
+	user, err := clientService.GetClientById(clientCtx, userEmail, schedule.ClientId)
 
 	if err != nil {
 		notificationLogger.Error("Error getting client", slog.String("error", err.Error()))
@@ -306,7 +306,7 @@ func UpdateSchedule(c *gin.Context) {
 			})
 			return
 		}
-		notificationLogger.Error("error on validation", slog.String("error", err.Error()))
+		notificationLogger.Error("error on validation", slog.String("error", err.Error()), "")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to update schedule",
 		})
@@ -359,7 +359,7 @@ func DeleteSchedule(c *gin.Context) {
 }
 
 // aggregateNotifications receives a service.Notification List and retrieves a Notification with the full client struct.
-func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
+func aggregateNotifications(ctx context.Context, nl []service.Notification) ([]Notification, error) {
 
 	notificationList := make([]Notification, 0, len(nl))
 	errChan := make(chan error, 1)
@@ -369,7 +369,7 @@ func aggregateNotifications(nl []service.Notification) ([]Notification, error) {
 
 		go func(n service.Notification) {
 
-			c, err := clientService.GetClientById(n.CreatedBy, n.ClientId)
+			c, err := clientService.GetClientById(ctx, n.CreatedBy, n.ClientId)
 
 			if err != nil {
 				notificationLogger.Error("error getting user", slog.String("error", err.Error()))

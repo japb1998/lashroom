@@ -89,7 +89,7 @@ func (s *scheduler) CreateSchedule(sch *schedule, token string) (name string, er
 		RoleArn: &sch.Role,
 		Input:   &sch.Payload,
 		RetryPolicy: &awsScheduler.RetryPolicy{
-			MaximumRetryAttempts: aws.Int64(1),
+			MaximumRetryAttempts: aws.Int64(0),
 		},
 	}
 

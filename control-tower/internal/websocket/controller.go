@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	wsLogger = log.New(os.Stdin, "[WebSocket Controller] ", log.Default().Flags())
+	wsLogger = log.New(os.Stdout, "[WebSocket Controller] ", log.Default().Flags())
 )
 
 // ConnectionSvc
