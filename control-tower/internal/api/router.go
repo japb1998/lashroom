@@ -1,9 +1,10 @@
 package api
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -21,10 +22,11 @@ import (
 type Response events.APIGatewayProxyResponse
 
 var (
-	TableName    = os.Getenv("EMAIL_TABLE")
-	ClientTable  = os.Getenv("CLIENT_TABLE")
-	queueUrl     = os.Getenv("QUEUE_URL")
-	routerLogger = log.New(os.Stdout, "[Router] ", log.Default().Flags())
+	TableName     = os.Getenv("EMAIL_TABLE")
+	ClientTable   = os.Getenv("CLIENT_TABLE")
+	queueUrl      = os.Getenv("QUEUE_URL")
+	routerHandler = slog.NewTextHandler(os.Stdout, nil).WithAttrs([]slog.Attr{slog.String("name", "api")})
+	routerLogger  = slog.New(routerHandler)
 )
 
 const (
@@ -32,7 +34,7 @@ const (
 )
 
 func InitRoutes() *gin.Engine {
-	routerLogger.Printf("Gin cold start")
+	routerLogger.Info("Gin cold start")
 	r := gin.Default()
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		v.RegisterValidation("rfc3339", func(fl validator.FieldLevel) bool {
@@ -57,6 +59,28 @@ func InitRoutes() *gin.Engine {
 			}
 
 			return true
+		})
+
+		v.RegisterValidation("noSpaces", func(fl validator.FieldLevel) bool {
+			var field string
+			if reflect.PointerTo(fl.Field().Type()).Kind() == reflect.String {
+				if !fl.Field().Addr().IsNil() {
+					return true
+				}
+				field = fl.Field().Addr().String()
+			} else {
+				if fl.Field().String() == "" {
+					return true
+				}
+				field = fl.Field().String()
+			}
+
+			if c := strings.Contains(field, " "); c {
+				return false
+			} else {
+				return true
+			}
+
 		})
 	}
 	corsConfig := cors.DefaultConfig()
@@ -104,6 +128,17 @@ func InitRoutes() *gin.Engine {
 		clients.DELETE("/:id", controller.DeleteClient)
 	}
 
+	// Templates Router
+
+	templates := r.Group("/template")
+	{
+		templates.GET("", controller.GetTemplates)
+		templates.POST("", controller.CreateTemplate)
+		templates.GET("/:name", controller.GetTemplate)
+		templates.PATCH("/:name", controller.UpdateTemplate)
+		templates.DELETE("/:name", controller.DeleteTemplate)
+
+	}
 	return r
 
 }

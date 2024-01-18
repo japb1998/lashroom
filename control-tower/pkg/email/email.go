@@ -1,3 +1,4 @@
+// Package email implements the EmailSvc abstracting the platform we will be using to end our emails
 package email
 
 import (
@@ -30,11 +31,14 @@ type EmailService struct {
 	client mailgun.MailgunImpl
 }
 
+// NewEmailService creates a new email service pointer
 func NewEmailService(ops *EmailSvcOpts) *EmailService {
 	return &EmailService{
 		client: *mailgun.NewMailgun(ops.Domain, ops.ApiKey),
 	}
 }
+
+// NewEmail
 func NewEmail(templateId, html, subject, from string, variables *map[string]any, to, cc []string) *Email {
 	return &Email{
 		TemplateId: templateId,
@@ -47,6 +51,7 @@ func NewEmail(templateId, html, subject, from string, variables *map[string]any,
 	}
 }
 
+// Send triggers an email to be send using the provided email configuration.
 func (s *EmailService) Send(ctx context.Context, email *Email) (err error) {
 	if email == nil || (email.Html == "" && email.TemplateId == "") {
 		return ErrEmptyEmail

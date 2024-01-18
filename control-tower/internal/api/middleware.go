@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -44,7 +45,7 @@ func currentUserMiddleWare() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, userSpan := tracer.Start(c.Request.Context(), "currentUserMiddleWare")
 
-		routerLogger.Println("Extracting User")
+		routerLogger.Debug("Extracting User")
 
 		token, ok := c.Request.Header["Authorization"]
 
@@ -59,7 +60,7 @@ func currentUserMiddleWare() gin.HandlerFunc {
 		email, err := getUserEmailFromToken(ctx, token[0])
 
 		if err != nil {
-			routerLogger.Println(err)
+			routerLogger.Debug("failed to extract user", slog.String("error", err.Error()))
 			userSpan.SetStatus(codes.Error, "Unauthorized")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Unauthorized",
@@ -76,4 +77,5 @@ func currentUserMiddleWare() gin.HandlerFunc {
 
 func init() {
 	tracer = otel.Tracer(ScopeName)
+	routerLogger.Debug("initialized api package")
 }

@@ -114,6 +114,9 @@ func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *Notificat
 		connectionLogger.Error(err.Error())
 		return fmt.Errorf("invalid notification message")
 	}
+
+	connectionLogger.Info("connections retrieved successfully", slog.Int("length", len(conns)))
+
 	for _, conn := range conns {
 		wg.Add(1)
 
@@ -124,7 +127,7 @@ func (c *ConnectionSvc) SendWsMessageByEmail(ctx context.Context, msg *Notificat
 				ConnectionId: &conn.ConnectionId,
 				Data:         d,
 			}); err != nil {
-				connectionLogger.Error("failed to send message,", slog.String("connectionID", conn.ConnectionId), slog.String("email", conn.Email))
+				connectionLogger.Error("failed to send message,", slog.String("connectionID", conn.ConnectionId), slog.String("email", conn.Email), slog.String("error", err.Error()))
 			}
 
 		}(conn)

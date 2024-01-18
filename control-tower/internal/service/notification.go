@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/japb1998/control-tower/internal/database"
+	"github.com/japb1998/control-tower/internal/dto"
 	"github.com/japb1998/control-tower/internal/model"
 	"github.com/japb1998/control-tower/internal/scheduler"
 )
@@ -24,7 +25,7 @@ const (
 
 // used as enums
 const (
-	Phone ContactOptions = iota
+	Whatsapp ContactOptions = iota
 	Email
 )
 const (
@@ -59,43 +60,8 @@ func (s notificationStatus) String() string {
 	return string(s)
 }
 
-// PaginationOps. used to determine how items should be returned
-type PaginationOps struct {
-	Page  int `form:"page" binding:"omitempty,min=0"`
-	Limit int `form:"limit" binding:"omitempty,min=1"`
-}
-
-type PaginatedNotifications struct {
-	Limit int            `json:"limit"`
-	Page  int            `json:"page"`
-	Total int64          `json:"total"`
-	Data  []Notification `json:"data"`
-}
-
-type NotificationInput struct {
-	Date            string `json:"date" binding:"required,rfc3339"`
-	ClientId        string `json:"clientId" binding:"required"`
-	DeliveryMethods []int8 `json:"deliveryMethods" binding:"required,min=1,dive,number,min=0,max=1"`
-}
-type Notification struct {
-	ID              string `json:"id,omitempty" validate:"required,uuid"`
-	Status          string `json:"status" validate:"required"`
-	Date            string `json:"date" validate:"required"`
-	ClientId        string `json:"clientId" validate:"required,uuid"`
-	CreatedBy       string `json:"createdBy" validate:"required,email"`
-	ClientToken     string `json:"clientToken" validate:"uuid"`
-	DeliveryMethods []int8 `json:"deliveryMethods" validate:"required,min=1,dive,min=0,max=1"`
-}
-
-type PatchNotification struct {
-	Date            string `json:"date" binding:"omitempty,rfc3339"`
-	ClientId        string `json:"clientId" binding:"omitempty,uuid"`
-	Status          string `json:"status"`
-	DeliveryMethods []int8 `json:"deliveryMethods,omitempty" binding:"omitempty,dive,number,min=0,max=1"`
-}
-
-func NewNotification(createdBy, id, clientToken string, input *NotificationInput) *Notification {
-	return &Notification{
+func NewNotification(createdBy, id, clientToken string, input *dto.NotificationInput) *dto.Notification {
+	return &dto.Notification{
 		ID:              id,
 		Status:          fmt.Sprintf("%s", NotSentStatus),
 		DeliveryMethods: input.DeliveryMethods,
@@ -103,10 +69,11 @@ func NewNotification(createdBy, id, clientToken string, input *NotificationInput
 		ClientId:        input.ClientId,
 		CreatedBy:       createdBy,
 		ClientToken:     clientToken,
+		Payload:         input.Payload,
 	}
 }
-func NewNotificationFromItem(item *model.NotificationItem) *Notification {
-	return &Notification{
+func NewNotificationFromItem(item *model.NotificationItem) *dto.Notification {
+	return &dto.Notification{
 		ID:              item.SortKey,
 		Status:          item.Status,
 		DeliveryMethods: item.DeliveryMethods,
@@ -161,7 +128,7 @@ func (s *NotificationService) DeleteNotification(createdBy, id string) error {
 }
 
 // ScheduleNotification schedules a new execution and stores the schedule ID in the db
-func (s *NotificationService) ScheduleNotification(createdBy string, notification *NotificationInput) (id string, err error) {
+func (s *NotificationService) ScheduleNotification(createdBy string, notification *dto.NotificationInput) (id string, err error) {
 	// we parse the incoming date in UTC
 	date, err := time.Parse(time.RFC3339, notification.Date)
 	if err != nil {
@@ -212,19 +179,19 @@ func (s *NotificationService) ScheduleNotification(createdBy string, notificatio
 }
 
 // UpdateNotification function allows you to update all notification fields except status for status use SetNotificationStatus.
-func (s *NotificationService) UpdateNotification(createdBy string, name string, ps PatchNotification) (Notification, error) {
+func (s *NotificationService) UpdateNotification(createdBy string, name string, ps dto.PatchNotification) (dto.Notification, error) {
 	sch, err := s.scheduler.GetSchedule(name)
-	var input Notification
+	var input dto.Notification
 	patchItem := database.PatchNotificationItem{}
 	if err != nil {
 
 		notificationLogger.Error(err.Error())
-		return Notification{}, fmt.Errorf("Unable to get notification")
+		return dto.Notification{}, fmt.Errorf("Unable to get notification")
 	}
 	err = json.Unmarshal([]byte(sch.Payload), &input)
 
 	if err != nil {
-		return Notification{}, fmt.Errorf("error retrieving schedule payload error: %w", err)
+		return dto.Notification{}, fmt.Errorf("error retrieving schedule payload error: %w", err)
 	}
 
 	if ps.ClientId != "" {
@@ -239,11 +206,11 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 		t, err := time.Parse(time.RFC3339, ps.Date)
 
 		if err != nil {
-			return Notification{}, fmt.Errorf("unable to format provided date:  %w", err)
+			return dto.Notification{}, fmt.Errorf("unable to format provided date:  %w", err)
 		}
 
 		if t.Before(time.Now()) {
-			return Notification{}, fmt.Errorf("date must happen before %s, got %s", time.Now(), ps.Date)
+			return dto.Notification{}, fmt.Errorf("date must happen before %s, got %s", time.Now(), ps.Date)
 		}
 		//  input date field
 		input.Date = ps.Date
@@ -259,13 +226,13 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 	payload, err := json.Marshal(input)
 
 	if err != nil {
-		return Notification{}, fmt.Errorf("error setting new payload err: %w", err)
+		return dto.Notification{}, fmt.Errorf("error setting new payload err: %w", err)
 	}
 	sch.Payload = string(payload)
 	_, err = s.scheduler.UpdateSchedule(sch)
 
 	if err != nil {
-		return Notification{}, nil
+		return dto.Notification{}, nil
 	}
 
 	_, err = s.store.UpdateNotification(createdBy, name, patchItem)
@@ -273,7 +240,7 @@ func (s *NotificationService) UpdateNotification(createdBy string, name string, 
 	if err != nil {
 		notificationLogger.Error(err.Error())
 		// TODO: if error when updating the db -  rollback
-		return Notification{}, fmt.Errorf("DB failed to updated")
+		return dto.Notification{}, fmt.Errorf("DB failed to updated")
 	}
 	return input, nil
 }
@@ -289,7 +256,7 @@ func (s *NotificationService) SetNotificationStatus(createdBy string, id string,
 }
 
 // GetNotification gets notification by dynamo Key
-func (s *NotificationService) GetNotification(createdBy, name string) (*Notification, error) {
+func (s *NotificationService) GetNotification(createdBy, name string) (*dto.Notification, error) {
 	n, err := s.store.GetNotification(createdBy, name)
 
 	if err != nil {
@@ -301,7 +268,7 @@ func (s *NotificationService) GetNotification(createdBy, name string) (*Notifica
 		return nil, fmt.Errorf("error getting notification")
 	}
 
-	notification := Notification{
+	notification := dto.Notification{
 		ID:              n.SortKey,
 		Status:          n.Status,
 		Date:            n.Date,
@@ -314,12 +281,12 @@ func (s *NotificationService) GetNotification(createdBy, name string) (*Notifica
 }
 
 // GetNotificationsByCreator gets notification by creator
-func (s *NotificationService) GetNotificationsByCreator(createdBy string, ops *PaginationOps) (*PaginatedNotifications, error) {
+func (s *NotificationService) GetNotificationsByCreator(createdBy string, ops *dto.PaginationOps) (*dto.PaginatedNotifications, error) {
 	dbOps := database.PaginationOps{
-		Skip:  ops.Limit * ops.Page,
-		Limit: ops.Limit,
+		Skip:  *ops.Limit * ops.Page,
+		Limit: *ops.Limit,
 	}
-	notificationLogger.Info("skip", slog.Int("skip", ops.Limit*ops.Page))
+	notificationLogger.Info("skip", slog.Int("skip", *ops.Limit*ops.Page))
 	paginatedItems, err := s.store.GetNotificationsByCreator(createdBy, &dbOps)
 
 	if err != nil {
@@ -327,11 +294,11 @@ func (s *NotificationService) GetNotificationsByCreator(createdBy string, ops *P
 		return nil, fmt.Errorf("error while getting notifications creator: %s, error: %w", createdBy, err)
 	}
 
-	notifications := make([]Notification, 0, len(paginatedItems.Data))
+	notifications := make([]dto.Notification, 0, len(paginatedItems.Data))
 
 	for i := 0; i < len(paginatedItems.Data); i++ {
 		n := (paginatedItems.Data)[i]
-		notification := Notification{
+		notification := dto.Notification{
 			ID:              n.SortKey,
 			Status:          n.Status,
 			Date:            n.Date,
@@ -343,7 +310,7 @@ func (s *NotificationService) GetNotificationsByCreator(createdBy string, ops *P
 		notifications = append(notifications, notification)
 	}
 
-	return &PaginatedNotifications{
+	return &dto.PaginatedNotifications{
 		Total: paginatedItems.Total,
 		Page:  ops.Page,
 		Data:  notifications,

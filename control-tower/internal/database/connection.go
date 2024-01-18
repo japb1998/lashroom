@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/japb1998/control-tower/internal/model"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var connectionRepository *ConnectionRepository
@@ -20,8 +21,6 @@ type ConnectionRepository struct {
 }
 
 func NewConnectionRepo(sess *session.Session) *ConnectionRepository {
-
-	clientLogger.Println("client Table ", os.Getenv("CONNECTION_TABLE"))
 	if connectionRepository == nil {
 		client := newDynamoClient(sess)
 		connectionRepository = &ConnectionRepository{
@@ -35,6 +34,12 @@ func NewConnectionRepo(sess *session.Session) *ConnectionRepository {
 
 // SaveConnection stores the connection id and the user ID it belongs to.
 func (cr *ConnectionRepository) SaveConnection(ctx context.Context, conn model.Connection) error {
+
+	// otel
+	tracer := getTracer()
+	_, span := tracer.Start(ctx, "save-connection")
+	span.SetAttributes(attribute.String("email", conn.Email), attribute.String("connectionId", conn.ConnectionId))
+	defer span.End()
 
 	item, err := dynamodbattribute.MarshalMap(conn)
 
@@ -53,6 +58,11 @@ func (cr *ConnectionRepository) SaveConnection(ctx context.Context, conn model.C
 
 // DeleteConnection - deletes connection from database
 func (cr *ConnectionRepository) DeleteConnection(ctx context.Context, conn model.Connection) error {
+	// otel
+	tracer := getTracer()
+	_, span := tracer.Start(ctx, "delete-connection")
+	span.SetAttributes(attribute.String("email", conn.Email), attribute.String("connectionId", conn.ConnectionId))
+	defer span.End()
 
 	key, err := dynamodbattribute.MarshalMap(conn)
 
@@ -71,6 +81,10 @@ func (cr *ConnectionRepository) DeleteConnection(ctx context.Context, conn model
 
 // GetConnectionIds search for all connection Ids related to the specified userId.
 func (cr *ConnectionRepository) GetConnectionIds(ctx context.Context, email string) ([]model.Connection, error) {
+	tracer := getTracer()
+	_, span := tracer.Start(ctx, "get-connection-ids")
+	span.SetAttributes(attribute.String("email", email))
+	defer span.End()
 
 	keyExpression := aws.String("#email = :email")
 	attrNames := map[string]*string{

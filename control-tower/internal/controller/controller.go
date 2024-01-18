@@ -15,6 +15,7 @@ import (
 )
 
 var connectionSvc *service.ConnectionSvc
+var templateSvc *service.TemplateSvc
 
 func init() {
 
@@ -34,15 +35,21 @@ func init() {
 	scheduler := scheduler.NewScheduler(sess)
 	notificationStore := database.NewNotificationRepository(sess)
 	notificationService = service.NewNotificationService(notificationStore, scheduler)
+	notificationLogger.Info("initialized scheduler")
 	//client service
 	clientStore := database.NewClientRepo(sess)
 	clientService = service.NewClientSvc(clientStore)
-	notificationLogger.Info("Controllers Initialized")
-
+	notificationLogger.Info("initialized client service")
 	// ws service
 	apigw := apigateway.NewApiGatewayClient(sess, os.Getenv("WS_HTTPS_URL"))
 	connStore := database.NewConnectionRepo(sess)
 	connectionSvc = service.NewConnectionSvc(connStore, apigw)
+	notificationLogger.Info("initialized ws service")
+
+	// template svc
+	templateStore := database.NewTemplateRepository(sess)
+	templateSvc = service.NewTemplateSvc(templateStore)
 	// initialize tracer
 	tracer = otel.Tracer("github.com/japb1998/control-tower/internal/controller")
+	notificationLogger.Info("Controllers Initialized")
 }

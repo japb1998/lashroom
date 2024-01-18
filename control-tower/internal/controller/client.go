@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/japb1998/control-tower/internal/dto"
 	"github.com/japb1998/control-tower/internal/service"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -51,7 +52,7 @@ func GetClientsByCreator(c *gin.Context) {
 // @Router /clients [post]
 func CreateClient(c *gin.Context) {
 	userEmail := c.MustGet("email").(string)
-	var clientDto service.CreateClient
+	var clientDto dto.CreateClient
 
 	if err := c.ShouldBindJSON(&clientDto); err != nil {
 		clientLogger.Error("CreateClient validation error", slog.String("error", err.Error()))
@@ -101,7 +102,7 @@ func CreateClient(c *gin.Context) {
 func UpdateClient(c *gin.Context) {
 	userEmail := c.MustGet("email").(string)
 	clientId, _ := c.Params.Get("id")
-	var clientDto service.PatchClient
+	var clientDto dto.PatchClient
 
 	if err := c.ShouldBindJSON(&clientDto); err != nil {
 		clientLogger.Error("Error validating UpdateClient payload", slog.String("error", err.Error()))
@@ -239,7 +240,7 @@ func ClientsWithFilters(c *gin.Context) {
 	defer span.End()
 
 	requestorEmail := c.MustGet("email").(string)
-	var paginationDto service.ClientPaginationDto
+	var paginationDto dto.ClientPaginationDto
 	if err := c.ShouldBindWith(&paginationDto, binding.Query); err != nil {
 		clientLogger.Error("Error on filters validation", slog.String("error", err.Error()))
 		var ve validator.ValidationErrors
@@ -264,8 +265,8 @@ func ClientsWithFilters(c *gin.Context) {
 	}
 
 	// default pagination value
-	if paginationDto.Limit == 0 {
-		paginationDto.Limit = 10
+	if *paginationDto.Limit == 0 {
+		*paginationDto.Limit = 10
 	}
 
 	childCtx, childSpan := tracer.Start(ctx, "client-service")

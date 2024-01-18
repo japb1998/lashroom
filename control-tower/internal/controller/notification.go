@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/japb1998/control-tower/internal/dto"
 	"github.com/japb1998/control-tower/internal/service"
 	_ "github.com/swaggo/files"       // swagger embed files
 	_ "github.com/swaggo/gin-swagger" // gin-swagger middleware
@@ -38,13 +39,13 @@ type PaginationOps struct {
 	Limit *int `form:"limit" json:"limit" binding:"omitempty,min=1"`
 }
 type Notification struct {
-	ID              string            `json:"id,omitempty"`
-	Status          string            `json:"status"`
-	Date            string            `json:"date"`
-	CreatedBy       string            `json:"createdBy"`
-	ClientToken     string            `json:"-"`
-	DeliveryMethods []int8            `json:"deliveryMethods"`
-	Client          service.ClientDto `json:"client"`
+	ID              string        `json:"id,omitempty"`
+	Status          string        `json:"status"`
+	Date            string        `json:"date"`
+	CreatedBy       string        `json:"createdBy"`
+	ClientToken     string        `json:"-"`
+	DeliveryMethods []int8        `json:"deliveryMethods"`
+	Client          dto.ClientDto `json:"client"`
 }
 
 // @BasePath /
@@ -95,27 +96,20 @@ func GetSchedules(c *gin.Context) {
 
 	clientLogger.Info("pagination ops", slog.Int("page", ops.Page), slog.Int("limit", *ops.Limit))
 
-	svcOps := service.PaginationOps{
+	svcOps := dto.PaginationOps{
 		Page: ops.Page,
 	}
 	if ops.Limit == nil {
-		svcOps.Limit = 10
+		svcOps.Limit = aws.Int(10)
 	} else {
-		svcOps.Limit = *ops.Limit
+		svcOps.Limit = ops.Limit
 	}
 
 	res, err := notificationService.GetNotificationsByCreator(userEmail, &svcOps)
 
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to get schedules",
-		})
-		return
-	}
-
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": err,
+			"error": err.Error(),
 		})
 		return
 	}
@@ -138,7 +132,7 @@ func GetSchedules(c *gin.Context) {
 
 	c.JSON(http.StatusOK, PaginatedNotifications{
 		Data:  nl,
-		Limit: svcOps.Limit,
+		Limit: *svcOps.Limit,
 		Page:  ops.Page,
 		Total: res.Total,
 	})
@@ -194,7 +188,7 @@ func PostSchedule(c *gin.Context) {
 	defer startSpan.End()
 	defer c.Request.Body.Close()
 	userEmail := c.MustGet("email").(string)
-	var schedule service.NotificationInput
+	var schedule dto.NotificationInput
 
 	if err := c.ShouldBindJSON(&schedule); err != nil {
 		var ve validator.ValidationErrors
@@ -261,9 +255,10 @@ func PostSchedule(c *gin.Context) {
 	/*
 		TODO: move ws notification to eventBridge event handler.
 	*/
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
-		if err := sendUserNotification(c.Request.Context(), user.Email, id, service.NotificationCreatedAction); err != nil {
+		defer wg.Done()
+		if err := sendUserNotification(c.Request.Context(), userEmail, id, service.NotificationCreatedAction); err != nil {
 			notificationLogger.Error("error sending ws message", slog.String("error", err.Error()))
 		}
 
@@ -289,7 +284,7 @@ func UpdateSchedule(c *gin.Context) {
 	userEmail := c.MustGet("email").(string)
 
 	id := c.Params.ByName("id")
-	var notification service.PatchNotification
+	var notification dto.PatchNotification
 	if err := c.ShouldBindJSON(&notification); err != nil {
 		var ve validator.ValidationErrors
 		if errors.As(err, &ve) {
@@ -359,7 +354,7 @@ func DeleteSchedule(c *gin.Context) {
 }
 
 // aggregateNotifications receives a service.Notification List and retrieves a Notification with the full client struct.
-func aggregateNotifications(ctx context.Context, nl []service.Notification) ([]Notification, error) {
+func aggregateNotifications(ctx context.Context, nl []dto.Notification) ([]Notification, error) {
 
 	notificationList := make([]Notification, 0, len(nl))
 	errChan := make(chan error, 1)
@@ -367,7 +362,7 @@ func aggregateNotifications(ctx context.Context, nl []service.Notification) ([]N
 
 	for _, n := range nl {
 
-		go func(n service.Notification) {
+		go func(n dto.Notification) {
 
 			c, err := clientService.GetClientById(ctx, n.CreatedBy, n.ClientId)
 
@@ -403,6 +398,7 @@ func aggregateNotifications(ctx context.Context, nl []service.Notification) ([]N
 }
 
 func sendUserNotification(ctx context.Context, email, notificationId, action string) error {
+
 	msg, err := service.NewNotificationUpdateMsg(email, notificationId).WithAction(action)
 
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -17,9 +18,11 @@ import (
 )
 
 var (
-	clientRepository *ClientRepository
-	clientLogger     = log.New(os.Stdout, "[Client Repository] ", log.Default().Flags())
+	clientHandler = slog.NewTextHandler(os.Stdout, nil).WithAttrs([]slog.Attr{slog.String("repository", "client")})
+	clientLogger  = slog.New(clientHandler)
 )
+
+var clientRepository *ClientRepository
 
 type ClientRepository struct {
 	Client    *DynamoClient
@@ -37,13 +40,14 @@ type PatchClientItem struct {
 }
 
 func NewClientRepo(sess *session.Session) *ClientRepository {
-	clientLogger.Println("client Table ", os.Getenv("CLIENT_TABLE"))
-	if clientRepository == nil {
-		client := newDynamoClient(sess)
-		clientRepository = &ClientRepository{
-			Client:    client,
-			tableName: os.Getenv("CLIENT_TABLE"),
-		}
+
+	if clientRepository != nil {
+		return clientRepository
+	}
+	client := newDynamoClient(sess)
+	clientRepository = &ClientRepository{
+		Client:    client,
+		tableName: os.Getenv("CLIENT_TABLE"),
 	}
 
 	return clientRepository
@@ -56,7 +60,7 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]model.Client
 	})
 
 	if err != nil {
-		clientLogger.Println("error marshalling query key error: ", err)
+		clientLogger.Error("error marshalling query key.", slog.String("error", err.Error()))
 
 		return nil, fmt.Errorf("invalid creator: %s", createdBy)
 	}
@@ -80,16 +84,16 @@ func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]model.Client
 		if err != nil {
 			temp := &dynamodb.ResourceNotFoundException{}
 			if errors.As(err, &temp) {
-				clientLogger.Println("no items with the provided query")
+				clientLogger.Debug("no items with the provided query")
 				break
 			}
 			return nil, fmt.Errorf("error querying client items error: %s", err)
 		}
-		clientLogger.Printf("retrieved %d users.", len(output.Items))
+		clientLogger.Debug("retrieved users.", slog.Int("length", len(output.Items)))
 		err = dynamodbattribute.UnmarshalListOfMaps(output.Items, &items)
 
 		if err != nil {
-			clientLogger.Println("error unmarshalling clients error:", err)
+			clientLogger.Error("error unmarshalling clients.", slog.String("error", err.Error()))
 			return nil, fmt.Errorf("error unmarshalling clients")
 		}
 
@@ -152,7 +156,7 @@ func (c *ClientRepository) ClientCountWithFilters(createdBy string, clientPatch 
 
 	if err != nil {
 
-		clientLogger.Println(err)
+		clientLogger.Error("failed to marshal values", slog.String("error", err.Error()))
 
 		return 0, errors.New("error while retreiving clients")
 	}
@@ -183,7 +187,6 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 	var queryInput = &dynamodb.QueryInput{
 		TableName:         &c.tableName,
 		ExclusiveStartKey: lastEvaluatedKey,
-		Limit:             aws.Int64(int64(p.Skip + p.Limit)),
 		ScanIndexForward:  aws.Bool(true),
 	}
 	primaryKeyExpressionList := []string{"#primaryKey = :primaryKey"}
@@ -220,7 +223,7 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 	}
 
 	if clientPatch.LastSeen != nil {
-		clientLogger.Println("Last Seen='%w'", clientPatch.LastSeen)
+
 		attributeValues[":lastSeen"] = clientPatch.LastSeen
 		expressionAttributeNames["#lastSeen"] = aws.String("lastSeen")
 		filterExpressionList = append(filterExpressionList, "#lastSeen = :lastSeen")
@@ -230,7 +233,7 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 
 	if err != nil {
 
-		clientLogger.Println(err)
+		clientLogger.Error("error while marshalling values", slog.String("error", err.Error()))
 
 		return nil, errors.New("error while retrieving clients")
 	}
@@ -244,17 +247,20 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 	}
 
 	queryInput.KeyConditionExpression = aws.String(strings.Join(primaryKeyExpressionList, " and "))
-
+	var (
+		output *dynamodb.QueryOutput
+	)
 	// loop until lastEvaluated key is nil or we reach our limit setup by the pagination.
 	for {
-		if len(clientEntityList) != 0 {
-			queryInput.Limit = aws.Int64(int64(p.Limit + p.Skip - len(clientEntityList)))
-		}
+
 		var clients []model.ClientItem
 		// lastEvaluated key everytime we start. 1st is nil
 		queryInput.ExclusiveStartKey = lastEvaluatedKey
 
-		output, err := c.Client.Query(queryInput)
+		/* to be removed once performance issues are resolved */
+		ts := time.Now()
+		output, err = c.Client.Query(queryInput)
+		fmt.Println(time.Since(ts))
 
 		if err != nil {
 
@@ -267,7 +273,7 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 
 		if err != nil {
 
-			clientLogger.Println(err)
+			clientLogger.Error("error while unmarshalling clients", slog.String("error", err.Error()))
 
 			return nil, fmt.Errorf("error while retrieving clients error: %w", err)
 		}
@@ -295,7 +301,9 @@ func (c *ClientRepository) GetClientWithFilters(createdBy string, clientPatch Pa
 }
 
 func (c *ClientRepository) CreateClient(client model.ClientItem) (model.ClientItem, error) {
-	clientLogger.Printf("Creating user: %v", client)
+
+	clientLogger.Debug("Creating user.", slog.Any("client", client))
+
 	item, err := dynamodbattribute.MarshalMap(client)
 
 	if err != nil {

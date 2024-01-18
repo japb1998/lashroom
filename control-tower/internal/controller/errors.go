@@ -15,15 +15,17 @@ func getErrorMsg(fe validator.FieldError) string {
 	case "required":
 		return "This field is required"
 	case "lte":
-		return "Should be less than " + fe.Param()
+		return "Should be less than " + fe.Tag()
 	case "gte":
-		return "Should be greater than " + fe.Param()
+		return "Should be greater than " + fe.Tag()
 	case "min":
-		return "should have min value of " + fe.Param()
+		return "should have min value of " + fe.Tag()
 	case "e164":
 		return "should meet e164 format"
 	case "rfc3339":
-		return "field should be date" + fe.Param()
+		return "field should be date" + fe.Tag()
+	case "noSpaces":
+		return "should not contain spaces"
 	}
 
 	return "Unknown error"

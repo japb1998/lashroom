@@ -1,31 +1,30 @@
 package database
 
 import (
+	"context"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
-
-var dynamoClient *DynamoClient
 
 type DynamoClient struct {
 	Client *dynamodb.DynamoDB
 }
 
 func newDynamoClient(sess *session.Session) *DynamoClient {
-	if dynamoClient == nil {
-		client := dynamodb.New(sess)
-		return &DynamoClient{
-			Client: client,
-		}
+
+	client := dynamodb.New(sess, sess.Config.WithDisableSSL(false))
+	return &DynamoClient{
+		Client: client,
 	}
-	return dynamoClient
 }
 
 func (dynamodb *DynamoClient) Query(queryInput *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
-
-	output, err := dynamodb.Client.Query(queryInput)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	output, err := dynamodb.Client.QueryWithContext(ctx, queryInput)
 
 	if err != nil {
 		log.Println(err.Error())

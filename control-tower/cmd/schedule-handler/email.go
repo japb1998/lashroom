@@ -15,21 +15,17 @@ var emailSvc *email.EmailService
 var clientSvc *service.ClientService
 var connectionSvc *service.ConnectionSvc
 
-func sendEmailReminder(ctx context.Context, firstName, lastName, opOutUrl string, to []string) error {
+func sendEmailReminder(ctx context.Context, to []string, payload map[string]any) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 	defer cancel()
 
-	tempVars := map[string]any{
-		"customer_name": fmt.Sprintf("%s %s", firstName, lastName),
-		"op_out_url":    opOutUrl,
-	}
-	message := email.NewEmail("lashroom", "", "Lash Room - 2 Weeks Maintenance Reminder", "no-reply@lashroombyeli.me", &tempVars, to, nil)
+	message := email.NewEmail("lashroom", "", fmt.Sprintf("Lash Room - %s Weeks Maintenance Reminder", payload["weeks"].(string)), "no-reply@lashroombyeli.me", &payload, to, nil)
 	if err := emailSvc.Send(ctx, message); err != nil {
 		fmt.Printf("email failed to send error= %s\n", err)
 		return err
 
 	} else {
-		handlerLogger.Info("Email Sent", slog.Any("to", to))
+		handlerLogger.Info("Email Sent", slog.Any("to", to), slog.Any("payload", payload))
 		return err
 	}
 }

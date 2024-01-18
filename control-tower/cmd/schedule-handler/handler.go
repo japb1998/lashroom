@@ -8,12 +8,16 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/japb1998/control-tower/internal/dto"
 	"github.com/japb1998/control-tower/internal/service"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 )
 
-func handler(ctx context.Context, event service.Notification) error {
+func handler(ctx context.Context, event dto.Notification) error {
+
+	handlerLogger.Debug("handler started", slog.Any("event", event))
+
 	c, span := tracer.Start(ctx, "handler-start")
 	defer span.End()
 
@@ -45,7 +49,9 @@ func handler(ctx context.Context, event service.Notification) error {
 	}
 	getClientSpan.End()
 
+	// loop through the event delivery methods and send notifications.
 	_, deliverySpan := tracer.Start(c, "delivery-methods-loop")
+
 	errChan := make(chan error, len(event.DeliveryMethods))
 	for _, i := range event.DeliveryMethods {
 
@@ -56,15 +62,25 @@ func handler(ctx context.Context, event service.Notification) error {
 				errChan <- nil
 				continue
 			}
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				ctx, cancel := context.WithTimeout(ctx, time.Second*30)
 				defer cancel()
 
-				opOut := fmt.Sprint("%s/unsubscribe/%s/%s", apiUrl, client.CreatedBy, client.Id)
+				// default values.
+				vars := map[string]any{
+					"op_out_url":    fmt.Sprintf("%s/unsubscribe/%s/%s", apiUrl, client.CreatedBy, client.Id),
+					"weeks":         "2",
+					"customer_name": fmt.Sprintf("%s %s", client.FirstName, client.LastName),
+				}
 
-				if err := sendEmailReminder(ctx, client.FirstName, client.LastName, opOut, []string{client.Email}); err != nil {
+				for k, v := range event.Payload {
+					vars[k] = v
+				}
+
+				if err := sendEmailReminder(ctx, []string{client.Email}, vars); err != nil {
 					handlerLogger.Info("email failed to send", slog.String("error", err.Error()))
 					errChan <- err
 
@@ -72,17 +88,29 @@ func handler(ctx context.Context, event service.Notification) error {
 					errChan <- nil
 				}
 			}()
-		case service.Phone:
+
+		case service.Whatsapp:
 			if client.Phone == "" {
 				handlerLogger.Info("Skipping whatsapp delivery. reason='phone is empty.'")
 				errChan <- nil
 				continue
 			}
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 
-				if err := sendWhatsappNotification(client.FirstName, "2", client.Phone); err != nil {
+				// we default to 2 weeks reminder.
+				weeks := "2"
+
+				if event.Payload != nil {
+					v, ok := event.Payload["weeks"]
+
+					if ok {
+						weeks = v
+					}
+				}
+				if err := sendWhatsappNotification(client.FirstName, weeks, client.Phone); err != nil {
 					handlerLogger.Info("failed to send message %s\n", slog.String("error", err.Error()))
 					errChan <- err
 

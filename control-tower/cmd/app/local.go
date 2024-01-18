@@ -69,7 +69,7 @@ func initApp() {
 	}
 	r := api.InitRoutes()
 
-	if err := r.Run(); err != nil {
+	if err := r.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}
 

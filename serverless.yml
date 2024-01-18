@@ -58,6 +58,7 @@ functions:
       NOTIFICATION_LAMBDA: !GetAtt SchedulerTargetLambdaFunction.Arn
       CONNECTION_TABLE: !Ref ConnectionsDataTable
       WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+      TEMPLATE_TABLE: !Ref TemplateTable
       GIN_MODE: release
     timeout: 30
   # lambda handler that send notifications triggered by eventBridge scheduler
@@ -72,17 +73,21 @@ functions:
     layers:
       - arn:aws:lambda:us-east-1:901920570463:layer:aws-otel-collector-arm64-ver-0-66-0:1
     environment:
+      # dynamo tables
       OTEL_SERVICE_NAME: control-tower
       EMAIL_TABLE: !Ref NotificationsTable
       CLIENT_TABLE: !Ref ClientTable
+      TEMPLATE_TABLE: !Ref TemplateTable
+      CONNECTION_TABLE: !Ref ConnectionsDataTable
+      ####
       MAIL_GUN_SECRET_ID: "${opt:stage, 'dev'}/control-tower/mailgun"
       API_URL: !Join ['', ['https://', !Ref ApiGatewayRestApi , '.execute-api.',  !Sub "${AWS::Region}", '.amazonaws.com/',  "${opt:stage, 'dev'}"]]
       TWILIO_SERVICE_ID: ${env:TWILIO_SERVICE_ID}
       TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
       TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
       TWILIO_TEMPLATE_ID: HX70acce7fe8a09e290969d180791c7016
-      CONNECTION_TABLE: !Ref ConnectionsDataTable
       WS_HTTPS_URL: !Join ['', ['https://', !Ref WebsocketsApi, '.execute-api.', !Sub '${AWS::Region}', '.amazonaws.com/', "${opt:stage, 'dev'}"]]
+  
   # websocket api
   ws-connection:
     timeout: 30
@@ -177,6 +182,22 @@ resources:
                 KeyType: RANGE
             Projection: 
               ProjectionType: ALL
+    # Templates Table
+    TemplateTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${env:APP_ID}-template-table-${opt:stage, 'dev'}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: createdBy
+            AttributeType: "S"
+          - AttributeName: name
+            AttributeType: "S"
+        KeySchema:
+          - AttributeName: createdBy
+            KeyType: HASH
+          - AttributeName: name
+            KeyType: RANGE
     # Table for the App Clients 
     ClientTable:
       Type: AWS::DynamoDB::Table
@@ -237,6 +258,9 @@ resources:
                     - !Join ["",[!GetAtt ClientTable.Arn, "/index/*"]]
                     - !GetAtt ConnectionsDataTable.Arn 
                     - !Join ["",[!GetAtt ConnectionsDataTable.Arn, "/index/*"]]
+                    - !GetAtt TemplateTable.Arn
+                    - !Join ["", [!GetAtt TemplateTable.Arn, "/index/*"]]
+  
           - PolicyName: ${env:APP_ID}-cloudwatch-default-${opt:stage, 'dev'}
             PolicyDocument:
               Version: '2012-10-17'

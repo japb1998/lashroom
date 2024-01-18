@@ -9,10 +9,10 @@ import (
 type ClientItem struct {
 	PrimaryKey   string     `json:"primaryKey"`
 	SortKey      string     `json:"sortKey"`
-	Phone        string     `json:"phone"`
-	Email        string     `json:"email"`
-	FirstName    string     `json:"firstName"`
-	LastName     string     `json:"lastName"`
+	Phone        string     `json:"phone" validate:"omitempty,e164"`
+	Email        string     `json:"email" validate:"omitempty,email"`
+	FirstName    string     `json:"firstName" validate:"omitempty,min=2"`
+	LastName     string     `json:"lastName" validate:"omitempty"`
 	Description  string     `json:"description"`
 	OptIn        bool       `json:"optIn"`
 	LastSeen     *time.Time `json:"lastSeen"`
