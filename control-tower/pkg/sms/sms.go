@@ -2,11 +2,17 @@ package sms
 
 import (
 	"fmt"
+	"os"
+
+	"log/slog"
 
 	"github.com/go-playground/validator/v10"
 	twilio "github.com/twilio/twilio-go"
 	openapi "github.com/twilio/twilio-go/rest/api/v2010"
 )
+
+var logHandler = slog.NewTextHandler(os.Stdout, nil)
+var logger = slog.New(logHandler).With("pkg", "sms")
 
 type MsgSvc struct {
 	Client             *twilio.RestClient
@@ -21,6 +27,7 @@ type Msg struct {
 }
 
 func (svc *MsgSvc) SendMessage(msg *Msg) error {
+	logger.Info("sending message", "to", msg.To, "templateId", msg.TemplateId, "templateVariables", string(msg.TemplateVariables))
 	params := &openapi.CreateMessageParams{}
 	params.SetTo(fmt.Sprintf("whatsapp:%s", msg.To))
 	params.SetFrom(svc.MessagingServiceId)
@@ -31,6 +38,7 @@ func (svc *MsgSvc) SendMessage(msg *Msg) error {
 	}
 
 	_, err := svc.Client.Api.CreateMessage(params)
+
 	if err != nil {
 		fmt.Println(err.Error())
 		return fmt.Errorf("failed to send Whatsapp message! error: %w", err)

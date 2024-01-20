@@ -53,6 +53,7 @@ func NewClientRepo(sess *session.Session) *ClientRepository {
 	return clientRepository
 }
 
+// GetClientByID returns all the clients for the provided creator email
 func (c *ClientRepository) GetClientsByCreator(createdBy string) ([]model.ClientItem, error) {
 
 	queryValue, err := dynamodbattribute.MarshalMap(map[string]any{
